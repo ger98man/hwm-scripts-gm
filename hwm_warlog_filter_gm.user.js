@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name           hwm_warlog_filter_gm
-// @author         ger98man (вспомогательные функции из hwm_exp_ability от Pahan)
-// @license        MIT (кроме вспомогательных функций из hwm_exp_ability от Pahan, у которого лицензия не указана)
+// @author         ger98man
+// @license        MIT
 // @namespace      hwm_bmxcs_personal
 // @description    Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице.
-// @version        1.1
+// @version        1.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js
@@ -17,50 +17,48 @@
 // @grant          GM_addStyle
 // ==/UserScript==
 
-if (typeof GM_getValue != 'function') {
-	this.GM_getValue=function (key,def) {return localStorage[key] || def;};
-	this.GM_setValue=function (key,value) {return localStorage[key]=value;};
-}
-if (typeof GM_addStyle != 'function') {
-	this.GM_addStyle=function (key) {
-		var style = document.createElement('style');
-		style.textContent = key;
-		document.querySelector("head").appendChild(style);
-	}
+// Вне менеджера скриптов (нет GM_*) настройки хранятся в localStorage, стили добавляются вручную
+function LoadSetting(AName, ADefault)
+{
+  return typeof GM_getValue == 'function' ? GM_getValue(AName, ADefault) : (localStorage.getItem(AName) || ADefault);
 }
 
-GM_addStyle('.hwm_wf_panel {margin:4px 0 8px; padding:5px 8px; font-size:11px; background:#fbf8f0; border:1px solid #d8cba9; border-radius:4px;}');
-GM_addStyle('.hwm_wf_panel select {font-size:11px; margin-right:6px;}');
-GM_addStyle('.hwm_wf_k {color:#696156;}');
+function SaveSetting(AName, AValue)
+{
+  if (typeof GM_setValue == 'function')
+    GM_setValue(AName, AValue);
+  else
+    localStorage.setItem(AName, AValue);
+}
+
+function AddCss(ACss)
+{
+  if (typeof GM_addStyle == 'function')
+    return GM_addStyle(ACss);
+  var LStyleNode = document.createElement('style');
+  LStyleNode.textContent = ACss;
+  document.head.appendChild(LStyleNode);
+}
+
+AddCss('.hwm_wf_panel {margin:4px 0 8px; padding:5px 8px; font-size:11px; background:#fbf8f0; border:1px solid #d8cba9; border-radius:4px;}');
+AddCss('.hwm_wf_panel select {font-size:11px; margin-right:6px;}');
+AddCss('.hwm_wf_k {color:#696156;}');
 
 function $(id) { return document.querySelector(id); }
 
-function addEvent(elem, evType, fn) {
-	elem.addEventListener(evType, fn, false);
+function PageParam(AName)
+{
+  return new URLSearchParams(location.search).get(AName) || '';
 }
 
-function URLAttrValueGet(attr_name, aurl)
+// Страницы игры в windows-1251. При ошибке сети колбэк получает пустую строку.
+function LoadPageText(AUrl, ACallback)
 {
-  var results = new RegExp("[\\?&]" + attr_name + "=([^&#]*)").exec(aurl);
-  return results == null ? "" : results[1];
-}
-
-function Ajax(AMethod, AURL, AParams, ACallBackFunc)
-{
-  var LRequest = new XMLHttpRequest();
-  LRequest.open(AMethod, AURL, true);
-  LRequest.overrideMimeType('text/html; charset=windows-1251');
-  LRequest.send(AParams);
-  LRequest.onreadystatechange = function()
-  {
-    if (LRequest.readyState == 4)
-      ACallBackFunc(LRequest.responseText);
-  };
-}
-
-function Trim(AText)
-{
-  return AText.replace(/^\s+|\s+$|^(&nbsp;)+|(&nbsp;)+$/g, '');
+  fetch(new URL(AUrl, location.href).href, {credentials: 'include'})
+    .then(function(AResponse) { return AResponse.arrayBuffer(); })
+    .then(function(ABytes) { return new TextDecoder('windows-1251').decode(ABytes); },
+          function() { return ''; })
+    .then(ACallback);
 }
 
 // ------------------ протокол боёв
@@ -133,7 +131,7 @@ function ExtractWarlogRows(ABox)
       var LN = LNodes[j];
       if (LN.nodeType == 8)
       {
-        LRow.Type = Trim(LN.nodeValue);
+        LRow.Type = LN.nodeValue.trim();
         continue;
       }
       if (LN.nodeType == 1)
@@ -178,7 +176,7 @@ function RowResult(ARow, APlayerId)
 
 function WarlogPageUrl(APage)
 {
-  return location.pathname + '?id=' + URLAttrValueGet('id', location.href) + '&page=' + APage;
+  return location.pathname + '?id=' + PageParam('id') + '&page=' + APage;
 }
 
 function WarlogProcess()
@@ -216,7 +214,7 @@ function WarlogProcess()
   var LSelect = $('#hwm_wf_filter');
   var LStatus = $('#hwm_wf_status');
   var LWinrate = $('#hwm_wf_winrate');
-  var LPlayerId = URLAttrValueGet('id', location.href);
+  var LPlayerId = PageParam('id');
   var LShown = [];            // строки, показанные сейчас на странице (с добранными)
 
   var LGTTypes = BATTLE_GROUPS[0].Types.concat(LoadGTTypes());
@@ -247,7 +245,7 @@ function WarlogProcess()
       LHtml += '<option value="' + BATTLE_GROUPS[i].Key + '">' + BATTLE_GROUPS[i].Name + '</option>';
     LHtml += '<option value="other">Прочее</option>';
     LSelect.innerHTML = LHtml;
-    LSelect.value = GM_getValue('warlog_filter', 'gt');
+    LSelect.value = LoadSetting('warlog_filter', 'gt');
     if (LSelect.selectedIndex < 0)
       LSelect.value = '';
   }
@@ -259,7 +257,7 @@ function WarlogProcess()
 
   // С фильтром добираем строки со следующих страниц, чтобы страница была полной
   var LPageSize = LRows.length;
-  var LCurPage = parseInt(URLAttrValueGet('page', location.href)) || 0;
+  var LCurPage = parseInt(PageParam('page')) || 0;
   var LPages = [];            // строки следующих страниц: LPages[0] - страница LCurPage + 1
   var LPagesEnd = false;
   var LFillToken = 0;
@@ -313,7 +311,7 @@ function WarlogProcess()
       }
       var LPage = LCurPage + LPages.length + 1;
       LStatus.innerHTML = 'Добираю бои со страницы ' + (LPage + 1) + '... (' + LCount + ' из ' + LPageSize + ')';
-      Ajax('GET', WarlogPageUrl(LPage), null, function(AText) {
+      LoadPageText(WarlogPageUrl(LPage), function(AText) {
         var LPageBox = FindWarlogBox(new DOMParser().parseFromString(AText, 'text/html'));
         var LPageRows = LPageBox ? ExtractWarlogRows(LPageBox) : [];
         if (LPageRows.length == 0)
@@ -328,10 +326,10 @@ function WarlogProcess()
 
   FillFilter();
   ApplyFilter();
-  addEvent(LSelect, 'change', function() {
-    GM_setValue('warlog_filter', LSelect.value);
+  LSelect.addEventListener('change', function() {
+    SaveSetting('warlog_filter', LSelect.value);
     ApplyFilter();
-  });
+  }, false);
 }
 
 // ------------------ протокол боёв
