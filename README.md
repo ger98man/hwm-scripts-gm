@@ -5,6 +5,7 @@
 | Скрипт | Версия | Описание | |
 |---|---|---|---|
 | `battle_damage_tooltip_gm` | 3.2.3 | Просмотр урона любого отряда, улучшенный лог боя, фиксы и фичи (перечислены в описаниее) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js) |
+| `hwm_battle_stats_gm` | 0.1 | В бою показывает суммарное здоровье обеих команд и рейтинг отрядов и героев по нанесённому урону | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_stats_gm.user.js) |
 | `hwm_combat_info_gm` | 1.0 | В бою под окном информации об отряде или герое показывает здоровье, численность, позицию на шкале АТБ, живые отряды армии и умения по фракциям | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_combat_info_gm.user.js) |
 | `hwm_debug_dump_gm` | 1.0 | Копирует в буфер данные страницы (бой, протокол боёв, любая другая) в виде JSON: для отладки и доработки скриптов | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_debug_dump_gm.user.js) |
 | `hwm_exp_protocol_gm` | 2.1 | На главной показывает, успеете ли взять умелку фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js) |
