@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения по наведённой цели (отбрасывающий удар медведей и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.1
+// @version        0.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -88,20 +88,16 @@
 
   const TEXT = IS_RU ? {
     luck: 'Удача', morale: 'Мораль', unluck: 'Неудача', dismorale: 'Падение БД',
-    base: 'база', now: 'сейчас', ability: 'Вероятностное умение',
+    luckShort: 'ЛАК', moraleShort: 'БД', ability: 'Вероятностное умение',
     hitChance: 'Шанс попадания', afterMisses: 'два промаха подряд', afterHits: 'два попадания подряд',
-    attackerLuck: 'Удача атакующего', hero: 'герой', heroLuck: 'Удача (на отряды героя)',
-    ofTarget: 'цели',
-    noTarget: 'Наведите мышь на вражеский отряд', partial: 'счётчики неполные',
-    counters: 'сработало/нет', reference: 'справочно', title: 'Вероятности',
+    attackerLuck: 'Удача атакующего', ofTarget: 'цели',
+    noTarget: 'Наведите мышь на вражеский отряд', reference: 'справочно',
   } : {
     luck: 'Luck', morale: 'Morale', unluck: 'Bad luck', dismorale: 'Low morale',
-    base: 'base', now: 'now', ability: 'Probabilistic ability',
+    luckShort: 'LUCK', moraleShort: 'MORALE', ability: 'Probabilistic ability',
     hitChance: 'Hit chance', afterMisses: 'two misses in a row', afterHits: 'two hits in a row',
-    attackerLuck: 'Attacker luck', hero: 'hero', heroLuck: 'Luck (applies to stacks)',
-    ofTarget: 'of target',
-    noTarget: 'Hover an enemy stack', partial: 'counters incomplete',
-    counters: 'hit/missed', reference: 'reference', title: 'Chances',
+    attackerLuck: 'Attacker luck', ofTarget: 'of target',
+    noTarget: 'Hover an enemy stack', reference: 'reference',
   };
 
   // Подписи бестелесных существ: запас на случай, когда внутреннего имени в объекте нет
@@ -125,7 +121,7 @@
     '#hwm_bc_panel,#hwm_bc_tip{position:fixed;z-index:2147483645;box-sizing:border-box;' +
     'background:rgba(30,24,14,.92);border:1px solid #b8964f;border-radius:4px;color:#f0e6cc;' +
     'font:12px Verdana,Arial,sans-serif;line-height:1.45;padding:4px 8px;}' +
-    '#hwm_bc_panel{display:none;min-width:210px;cursor:move;user-select:none;}' +
+    '#hwm_bc_panel{display:none;min-width:84px;cursor:move;user-select:none;}' +
     '#hwm_bc_tip{display:none;pointer-events:none;white-space:nowrap;}' +
     '#hwm_bc_panel b,#hwm_bc_tip b{color:#f0d999;}' +
     '#hwm_bc_panel .hwm-bc-head,#hwm_bc_tip .hwm-bc-head{font-weight:bold;color:#f0d999;' +
@@ -559,35 +555,25 @@
     return line;
   }
 
-  // Строка про удачу или мораль: параметр, базовый шанс, текущий шанс и счётчики
-  function chanceRow(label, value, hits, misses) {
-    const base = Math.min(Math.abs(value), 10) / 10;
-    const now = adaptiveChance(value, hits, misses);
-    const mark = partial ? '~' : '';
-    const text = value + ' (' + TEXT.base + ' ' + percent(base) + ') ' +
-      TEXT.now + ' ' + mark + percent(now) + ' [' + hits + '/' + misses + ']';
-    return row(label, text, value < 0 ? 'hwm-bc-neg' : 'hwm-bc-val');
+  // Строка панели: только текущий шанс, "~" - счётчики неполные, "-" - шанса нет
+  function panelRow(label, chance, isNegative) {
+    const text = chance === null ? '-' : (partial ? '~' : '') + percent(chance);
+    return row(label, text, isNegative ? 'hwm-bc-neg' : 'hwm-bc-val');
   }
 
   function renderPanel(unit) {
     panel.textContent = '';
     const index = unit.obj_index;
-    panel.appendChild(head((unit.nametxt || '#' + index) + (unit.hero ? ' (' + TEXT.hero + ')' : '')));
-
     const luck = stackLuck(unit);
     const morale = stackMorale(unit);
 
     // Удача героя не действует на него самого, только на его отряды
-    if (unit.hero) {
-      panel.appendChild(row(TEXT.heroLuck, String(luck), luck < 0 ? 'hwm-bc-neg' : 'hwm-bc-val'));
-    } else {
-      panel.appendChild(chanceRow(luck < 0 ? TEXT.unluck : TEXT.luck, luck,
-        luckHits[index] || 0, luckMisses[index] || 0));
-    }
-    panel.appendChild(chanceRow(morale < 0 ? TEXT.dismorale : TEXT.morale, morale,
-      moraleHits[index] || 0, moraleMisses[index] || 0));
+    const luckChance = unit.hero ? null
+      : adaptiveChance(luck, luckHits[index] || 0, luckMisses[index] || 0);
+    const moraleChance = adaptiveChance(morale, moraleHits[index] || 0, moraleMisses[index] || 0);
 
-    if (partial) panel.appendChild(note(TEXT.partial));
+    panel.appendChild(panelRow(TEXT.luckShort, luckChance, luck < 0));
+    panel.appendChild(panelRow(TEXT.moraleShort, moraleChance, morale < 0));
   }
 
   // Параметр отряда и его текущий шанс: 2 -> 31%
