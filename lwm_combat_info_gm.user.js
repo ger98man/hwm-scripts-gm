@@ -7,6 +7,10 @@
 // @run-at          document-end
 // @grant           none
 // @version         0.1
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/lwm_combat_info_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/lwm_combat_info_gm.user.js
 // ==/UserScript==
 
 

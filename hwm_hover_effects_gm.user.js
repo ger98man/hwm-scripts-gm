@@ -3,6 +3,10 @@
 // @namespace      hwm_hover_effects
 // @description    Во время боя при наведении мыши на отряд показывает в столбике чата над строкой ввода его эффекты, у которых есть время действия
 // @version        0.5
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_hover_effects_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_hover_effects_gm.user.js
 // @match          https://www.heroeswm.ru/war*
 // @match          https://heroeswm.ru/war*
 // @match          https://mirror.heroeswm.ru/war*

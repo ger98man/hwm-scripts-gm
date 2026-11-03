@@ -3,6 +3,10 @@
 // @namespace      hwm_no_retaliation
 // @description    Во время боя помечает отряды, у которых снята отдача (ответ уже потрачен до их следующего хода)
 // @version        0.3
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_no_retaliation_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_no_retaliation_gm.user.js
 // @match          https://www.heroeswm.ru/war*
 // @match          https://heroeswm.ru/war*
 // @match          https://mirror.heroeswm.ru/war*

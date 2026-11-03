@@ -3,6 +3,10 @@
 // @namespace      hwm_sklad_rent
 // @description    Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта)
 // @version        0.1
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js
 // @match          https://*.heroeswm.ru/sklad_info.php*
 // @match          https://heroeswm.ru/sklad_info.php*
 // @match          https://*.lordswm.com/sklad_info.php*

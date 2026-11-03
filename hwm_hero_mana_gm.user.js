@@ -3,6 +3,10 @@
 // @namespace      hwm_hero_mana
 // @description    Показывает ману героев во время боя (сейчас/макс) под фигуркой героя
 // @version        0.3
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_hero_mana_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_hero_mana_gm.user.js
 // @match          https://www.heroeswm.ru/war*
 // @match          https://heroeswm.ru/war*
 // @match          https://mirror.heroeswm.ru/war*

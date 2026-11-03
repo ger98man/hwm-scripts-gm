@@ -4,6 +4,10 @@
 // @namespace      hwm_bmxcs_personal
 // @description    Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице.
 // @version        1.1
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js
 // @encoding 	   utf-8
 // @include        http*://*heroeswm.ru/pl_warlog.php*
 // @include        http*://*lordswm.com/pl_warlog.php*

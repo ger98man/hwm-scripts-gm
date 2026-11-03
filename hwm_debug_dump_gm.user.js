@@ -3,6 +3,10 @@
 // @namespace      hwm_debug_dump
 // @description    Временный скрипт: собирает данные страницы боя / протокола боёв для доработки скриптов
 // @version        0.7
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_debug_dump_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_debug_dump_gm.user.js
 // @match          https://*.heroeswm.ru/*
 // @match          https://heroeswm.ru/*
 // @match          https://*.lordswm.com/*

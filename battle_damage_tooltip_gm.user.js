@@ -2,6 +2,10 @@
 // @name   battle_damage_tooltip_gm
 // @namespace    http://tampermonkey.net/
 // @version      3.2.3
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js
 // @description  Просмотр урона любого отряда, улучшенный лог боя, фиксы и фичи (перечислены в описаниее)
 // @author       Something begins
 // @license      MIT

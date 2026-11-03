@@ -5,6 +5,10 @@
 // @namespace      hwm_bmxcs_personal
 // @description    Личная версия: экспоумка, прогноз умелки по боям ГТ, загрузка боёв ГТ из протокола. Фильтр протокола - hwm_warlog_filter_gm. Не обновляется с greasyfork.
 // @version        1.25
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
 // @encoding 	   utf-8
 // @include        http*://*heroeswm.ru/home.php*
 // @include        http*://*heroeswm.ru/transfer.php*
@@ -701,7 +705,7 @@ function GetGTStats()
 
 // ------------------ протокол боёв
 
-// Фильтр протокола и винрейт - в отдельном скрипте hwm_warlog_filter_gm.js.
+// Фильтр протокола и винрейт - в отдельном скрипте hwm_warlog_filter_gm.user.js.
 // Здесь только загрузка итогов боёв ГТ в базу.
 
 var GT_TYPES_KEY = 'gt_types';

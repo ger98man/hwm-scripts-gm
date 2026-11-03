@@ -3,6 +3,10 @@
 // @namespace      hwm_res_value
 // @description    Примерная стоимость ресурсов, элементов и частей на странице персонажа (цены редактируются)
 // @version        0.1
+// @tag            hwm-gm
+// @homepageURL    https://github.com/ger98man/hwm-scripts-gm
+// @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_res_value_gm.user.js
+// @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_res_value_gm.user.js
 // @match          https://www.heroeswm.ru/pl_info.php*
 // @match          https://heroeswm.ru/pl_info.php*
 // @match          https://mirror.heroeswm.ru/pl_info.php*
