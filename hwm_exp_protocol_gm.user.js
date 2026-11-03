@@ -250,7 +250,7 @@
       '<div class="hwm_ea_note">Максимальная умелка. Выберите другую фракцию в настройках</div>';
     box.title =
       'Вы апнули максимальную умелку фракции ' + goal.Name + '\n' +
-      'Смените фракцию и уровень умелки который хотите взять на этом уровне';
+      'Выберите в настройках другую фракцию и нужный уровень умелки';
   }
 
   function renderNoForecast(box, goal, head, bar, needRatio) {
@@ -383,7 +383,7 @@
     dialog.innerHTML =
       '<div id="hwm_ea_close" title="Закрыть">x</div>' +
       '<div class="hwm_ea_title">' + SCRIPT_TITLE + ' ' + SCRIPT_VERSION + '</div><hr/>' +
-      '<div><b>Выберите фракцию и уровень умелки который хотите взять на этом уровне:</b></div>' +
+      '<div><b>Какую умелку хотите взять до апа уровня:</b></div>' +
       '<div><select id="hwm_ea_faction"></select> Фракция</div>' +
       '<div><select id="hwm_ea_level"></select> Уровень умелки</div>' +
       '<div><input type="number" min="0" id="hwm_ea_battle_exp" value="' + (manualExp > 0 ? manualExp : '') + '" placeholder="' +
