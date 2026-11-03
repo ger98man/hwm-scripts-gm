@@ -2,6 +2,7 @@
 // ==UserScript==
 // @name           hwm_exp_protocol_gm
 // @author         ger98man (личная версия на основе hwm_exp_ability от Pahan)
+// @license        не указана (основан на hwm_exp_ability от Pahan, у которого лицензия не указана)
 // @namespace      hwm_bmxcs_personal
 // @description    Личная версия: экспоумка, прогноз умелки по боям ГТ, загрузка боёв ГТ из протокола. Фильтр протокола - hwm_warlog_filter_gm. Не обновляется с greasyfork.
 // @version        1.25

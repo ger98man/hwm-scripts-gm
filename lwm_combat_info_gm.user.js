@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name            lwm_combat_info_gm
 // @author          ger98man (based on a script by thirdwater)
+// @license         Not specified (the original LWM Combat Info by Thirdwater has no license)
 // @namespace       https://greasyfork.org/en/users/731199-thirdwater
 // @description     Displays extra information during combats
 // @match           *://www.lordswm.com/war.php?*

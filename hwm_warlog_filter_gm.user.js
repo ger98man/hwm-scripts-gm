@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_warlog_filter_gm
-// @author         ger98man
+// @author         ger98man (вспомогательные функции из hwm_exp_ability от Pahan)
+// @license        MIT (кроме вспомогательных функций из hwm_exp_ability от Pahan, у которого лицензия не указана)
 // @namespace      hwm_bmxcs_personal
 // @description    Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице.
 // @version        1.1

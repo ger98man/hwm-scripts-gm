@@ -14,3 +14,12 @@
 | `hwm_sklad_rent_gm` | 0.1 | Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js) |
 | `hwm_warlog_filter_gm` | 1.1 | Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице. | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js) |
 | `lwm_combat_info_gm` | 0.1 | Displays extra information during combats | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/lwm_combat_info_gm.user.js) |
+
+## Лицензии
+
+Файл [LICENSE](LICENSE) (MIT) действует для всего, что написано автором репозитория. Для отдельных скриптов смотрите поле `@license` в заголовке, оно важнее общего файла:
+
+- `battle_damage_tooltip_gm` — MIT, авторство исходного скрипта указано в `@author`.
+- `hwm_warlog_filter_gm` — MIT, кроме вспомогательных функций из `hwm_exp_ability` от Pahan.
+- `hwm_exp_protocol_gm` — лицензия не указана: основан на `hwm_exp_ability` от Pahan, у которого её нет.
+- `lwm_combat_info_gm` — лицензия не указана: основан на LWM Combat Info от Thirdwater, у которого её нет.

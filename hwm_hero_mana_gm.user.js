@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_hero_mana_gm
 // @author         ger98man
+// @license        MIT
 // @namespace      hwm_hero_mana
 // @description    Показывает ману героев во время боя (сейчас/макс) под фигуркой героя
 // @version        0.3

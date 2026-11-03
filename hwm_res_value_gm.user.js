@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_res_value_gm
 // @author         ger98man
+// @license        MIT
 // @namespace      hwm_res_value
 // @description    Примерная стоимость ресурсов, элементов и частей на странице персонажа (цены редактируются)
 // @version        0.1

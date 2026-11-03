@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_hover_effects_gm
 // @author         ger98man
+// @license        MIT
 // @namespace      hwm_hover_effects
 // @description    Во время боя при наведении мыши на отряд показывает в столбике чата над строкой ввода его эффекты, у которых есть время действия
 // @version        0.5

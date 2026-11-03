@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_debug_dump_gm
 // @author         ger98man
+// @license        MIT
 // @namespace      hwm_debug_dump
 // @description    Временный скрипт: собирает данные страницы боя / протокола боёв для доработки скриптов
 // @version        0.7

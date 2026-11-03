@@ -1,6 +1,7 @@
 // ==UserScript==
 // @name           hwm_no_retaliation_gm
 // @author         ger98man
+// @license        MIT
 // @namespace      hwm_no_retaliation
 // @description    Во время боя помечает отряды, у которых снята отдача (ответ уже потрачен до их следующего хода)
 // @version        0.3
