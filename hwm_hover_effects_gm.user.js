@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_hover_effects
 // @description    Во время боя при наведении мыши на отряд показывает в столбике чата над строкой ввода его эффекты, у которых есть время действия
-// @version        0.5
+// @version        0.6
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_hover_effects_gm.user.js
@@ -50,12 +50,13 @@
   const style = document.createElement('style');
   style.textContent =
     '#hwm_hover_eff{position:fixed;z-index:2147483646;pointer-events:none;display:none;box-sizing:border-box;overflow:hidden;' +
-    'padding:0 8px;font:14px Verdana,Arial,sans-serif;color:#ddd;text-shadow:0 0 2px #000,0 0 2px #000;}' +
+    'padding:4px 8px;background:rgba(30,24,14,.92);border:1px solid #b8964f;border-radius:4px;' +
+    'font:14px Verdana,Arial,sans-serif;color:#ddd;}' +
     '#hwm_hover_eff .hwm-he-name{font-weight:bold;margin-bottom:4px;white-space:nowrap;color:#f0d999;}' +
     '#hwm_hover_eff table{border-collapse:collapse;}' +
     '#hwm_hover_eff td{padding:2px 0;white-space:nowrap;font-size:inherit;}' +
     '#hwm_hover_eff td[width]{width:.6em;}' +
-    '#hwm_hover_eff tr:first-child td{font-weight:bold;color:#888;}' +
+    '#hwm_hover_eff tr:first-child td{font-weight:bold;color:#b0a382;}' +
     '#hwm_hover_eff tr.hwm-he-pos td{color:#6fdc4f;}' +
     '#hwm_hover_eff tr.hwm-he-neg td{color:#ff6b5b;}' +
     '#hwm_hover_eff tr.hwm-he-neu td{color:#8fb8ff;}';
