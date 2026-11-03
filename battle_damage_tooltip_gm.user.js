@@ -7,7 +7,7 @@
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js
 // @downloadURL    https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js
 // @description  Просмотр урона любого отряда, улучшенный лог боя, фиксы и фичи (перечислены в описаниее)
-// @author       Something begins
+// @author       ger98man (на основе скрипта Something begins)
 // @license      MIT
 // @match       https://www.heroeswm.ru/war*
 // @match       https://my.lordswm.com/war*

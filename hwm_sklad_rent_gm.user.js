@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name           hwm_sklad_rent_gm
+// @author         ger98man
 // @namespace      hwm_sklad_rent
 // @description    Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта)
 // @version        0.1

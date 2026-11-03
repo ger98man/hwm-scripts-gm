@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name           hwm_warlog_filter_gm
-// @author         bmxcs
+// @author         ger98man
 // @namespace      hwm_bmxcs_personal
 // @description    Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице.
 // @version        1.1

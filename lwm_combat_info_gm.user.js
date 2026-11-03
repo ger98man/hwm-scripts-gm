@@ -1,5 +1,6 @@
 // ==UserScript==
 // @name            lwm_combat_info_gm
+// @author          ger98man (based on a script by thirdwater)
 // @namespace       https://greasyfork.org/en/users/731199-thirdwater
 // @description     Displays extra information during combats
 // @match           *://www.lordswm.com/war.php?*
