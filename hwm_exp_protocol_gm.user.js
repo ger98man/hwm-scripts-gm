@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
 // @description    На главной показывает, успеете ли взять умелку фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm
-// @version        2.0
+// @version        2.1
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
@@ -26,7 +26,7 @@
   'use strict';
 
   const SCRIPT_TITLE = 'Экспоумка';
-  const SCRIPT_VERSION = '2.0';
+  const SCRIPT_VERSION = GM_info.script.version;
 
   // Сколько умения нужно для каждого уровня умелки фракции (уровень 1 - первый элемент)
   const SKILL_THRESHOLDS = [20, 50, 90, 160, 280, 500, 900, 1600, 2900, 5300, 9600, 17300];
