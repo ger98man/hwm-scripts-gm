@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения по наведённой цели (отбрасывающий удар медведей и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.2
+// @version        0.3
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -55,8 +55,9 @@
   // На столько строка лога про удачу/мораль может разойтись по времени со своим испытанием
   const LINE_WINDOW_MS = 2000;
   const PANEL_KEY = 'hwm_battle_chances_panel';
-  // Отступ блока у курсора, чтобы он не стоял прямо под мышкой и не мешал полю
-  const CURSOR_GAP = 18;
+  // Отступ блока у курсора: чтобы он не стоял прямо под мышкой и не закрывал
+  // цифры урона, которые игра рисует у фигуры наведённого отряда
+  const CURSOR_GAP = 28;
   // Окна игры, при открытых которых блок у курсора не показываем
   const BLOCKING_WINDOWS = ['win_InfoCreatureEffect', 'win_InfoCreature', 'win_InfoHero', 'win_InfoHero2', 'win_BattleResult'];
 
@@ -87,17 +88,13 @@
   const IS_RU = location.hostname.indexOf('heroeswm') > -1;
 
   const TEXT = IS_RU ? {
-    luck: 'Удача', morale: 'Мораль', unluck: 'Неудача', dismorale: 'Падение БД',
     luckShort: 'ЛАК', moraleShort: 'БД', ability: 'Вероятностное умение',
     hitChance: 'Шанс попадания', afterMisses: 'два промаха подряд', afterHits: 'два попадания подряд',
-    attackerLuck: 'Удача атакующего', ofTarget: 'цели',
-    noTarget: 'Наведите мышь на вражеский отряд', reference: 'справочно',
+    reference: 'справочно',
   } : {
-    luck: 'Luck', morale: 'Morale', unluck: 'Bad luck', dismorale: 'Low morale',
     luckShort: 'LUCK', moraleShort: 'MORALE', ability: 'Probabilistic ability',
     hitChance: 'Hit chance', afterMisses: 'two misses in a row', afterHits: 'two hits in a row',
-    attackerLuck: 'Attacker luck', ofTarget: 'of target',
-    noTarget: 'Hover an enemy stack', reference: 'reference',
+    reference: 'reference',
   };
 
   // Подписи бестелесных существ: запас на случай, когда внутреннего имени в объекте нет
@@ -541,13 +538,6 @@
     return line;
   }
 
-  function note(text) {
-    const line = document.createElement('div');
-    line.className = 'hwm-bc-dim';
-    line.textContent = text;
-    return line;
-  }
-
   function head(text) {
     const line = document.createElement('div');
     line.className = 'hwm-bc-head';
@@ -576,33 +566,28 @@
     panel.appendChild(panelRow(TEXT.moraleShort, moraleChance, morale < 0));
   }
 
-  // Параметр отряда и его текущий шанс: 2 -> 31%
-  function shortChanceRow(label, value, hits, misses) {
-    const now = adaptiveChance(value, hits, misses);
-    return row(label, value + ' -> ' + (partial ? '~' : '') + percent(now),
-      value < 0 ? 'hwm-bc-neg' : 'hwm-bc-val');
+  // Шанс с пометкой "справочно" в той же строке: лишняя строка закрывала бы поле
+  function referenceRow(label, chance) {
+    const line = row(label, percent(chance), 'hwm-bc-val');
+    const mark = document.createElement('span');
+    mark.className = 'hwm-bc-dim';
+    mark.textContent = ' ' + TEXT.reference;
+    line.appendChild(mark);
+    return line;
   }
 
+  // Блок у курсора - только то, что относится к удару: удача и БД постоянны, поэтому
+  // для наведённого отряда их показывает панель. Возвращает false, если показывать нечего:
+  // тогда блок прячется и не закрывает фигуру с цифрами урона
   function renderTip(target, attacker) {
     tip.textContent = '';
     const index = target.obj_index;
-    tip.appendChild(head(attacker
-      ? (attacker.nametxt || '?') + ' -> ' + (target.nametxt || '?')
-      : (target.nametxt || '#' + index)));
+    const lines = [];
 
     if (attacker) {
       const chance = abilityChance(stackHp(attacker), stackHp(target));
-      const name = knownAbility(attacker);
       const final = chance !== null && hasSecondTry(attacker.obj_index) ? withSecondTry(chance) : chance;
-      tip.appendChild(row(name || TEXT.ability, percent(final), 'hwm-bc-val'));
-      tip.appendChild(note(TEXT.reference));
-
-      if (!attacker.hero) {
-        const own = attacker.obj_index;
-        const luck = stackLuck(attacker);
-        tip.appendChild(shortChanceRow(luck < 0 ? TEXT.unluck : TEXT.attackerLuck, luck,
-          luckHits[own] || 0, luckMisses[own] || 0));
-      }
+      lines.push(referenceRow(knownAbility(attacker) || TEXT.ability, final));
     }
 
     // Шанс попадания по бестелесному зависит от двух предыдущих исходов по этой цели:
@@ -611,18 +596,17 @@
       const chance = hitChance(index);
       const reason = chance === 0.5 ? '' :
         ' (' + (chance === 1 ? TEXT.afterMisses : TEXT.afterHits) + ')';
-      tip.appendChild(row(TEXT.hitChance, percent(chance) + reason,
+      lines.push(row(TEXT.hitChance, percent(chance) + reason,
         chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-val'));
     }
 
-    // Шансы самого наведённого отряда, по его собственным статам
-    const suffix = attacker ? ' ' + TEXT.ofTarget : '';
-    const luck = stackLuck(target);
-    const morale = stackMorale(target);
-    tip.appendChild(shortChanceRow((luck < 0 ? TEXT.unluck : TEXT.luck) + suffix, luck,
-      luckHits[index] || 0, luckMisses[index] || 0));
-    tip.appendChild(shortChanceRow((morale < 0 ? TEXT.dismorale : TEXT.morale) + suffix, morale,
-      moraleHits[index] || 0, moraleMisses[index] || 0));
+    if (!lines.length) return false;
+
+    tip.appendChild(head(attacker
+      ? (attacker.nametxt || '?') + ' -> ' + (target.nametxt || '?')
+      : (target.nametxt || '#' + index)));
+    for (const line of lines) tip.appendChild(line);
+    return true;
   }
 
   // --- панель: позиция и перетаскивание ---
@@ -705,9 +689,12 @@
 
   let panelKey = '';
   let tipKey = '';
+  let tipShown = false;
 
-  // Отряд для панели: выбранный в окне информации, иначе активный
+  // Отряд для панели: под курсором, иначе выбранный в окне информации, иначе активный
   function panelUnit() {
+    const hovered = onField && !infoWindowOpen() ? getUnit(hoveredIndex()) : null;
+    if (hovered && !hovered.rock) return hovered;
     const selected = w.cur_unit_info === undefined ? 0 : parseInt(w.cur_unit_info) || 0;
     if (selected > 0 && infoWindowOpen()) {
       const unit = getUnit(selected);
@@ -741,6 +728,7 @@
     if (!target) {
       tip.style.display = 'none';
       tipKey = '';
+      tipShown = false;
       return;
     }
     // Шанс умения считается при атаке, поэтому для него нужен живой чужой отряд.
@@ -750,13 +738,14 @@
       candidate.obj_index !== targetIndex && candidate.side !== target.side ? candidate : null;
     const own = attacker ? attacker.obj_index : 0;
     const key = [own, targetIndex, attacker ? stackHp(attacker) : 0, stackHp(target),
-      stackLuck(target), stackMorale(target), luckHits[own] || 0, luckMisses[own] || 0,
-      luckHits[targetIndex] || 0, luckMisses[targetIndex] || 0,
-      moraleHits[targetIndex] || 0, moraleMisses[targetIndex] || 0,
-      (streak[targetIndex] || []).join(','), partial].join('|');
+      (streak[targetIndex] || []).join(',')].join('|');
     if (key !== tipKey) {
-      renderTip(target, attacker);
+      tipShown = renderTip(target, attacker);
       tipKey = key;
+    }
+    if (!tipShown) {
+      tip.style.display = 'none';
+      return;
     }
     tip.style.display = 'block';
     placeTip();
