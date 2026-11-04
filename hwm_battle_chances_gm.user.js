@@ -3,8 +3,8 @@
 // @author         ger98man
 // @license        MIT
 // @namespace      hwm_battle_chances
-// @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения по наведённой цели (отбрасывающий удар медведей и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.4
+// @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения атакующего по наведённой цели с названием умения из базы игры (отбрасывающий удар, ослепление, оглушение и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
+// @version        0.5
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -31,13 +31,24 @@
 // Это модель, а не документированное поведение: счётчики видны в панели, чтобы расхождение
 // с сервером было заметно. Если скрипт открыт посреди боя, счётчики неполные - помечаем "~".
 //
-// Вероятностные умения (отбрасывающий удар, ослепление, оглушение и прочие): справка говорит
-// только что шанс зависит от суммарного здоровья отряда и цели, без чисел. Числа из FAQ:
-//   HP отряда >  HP цели: P = 25% + 3% * (HP отряда / HP цели)
-//   HP отряда <= HP цели: P = 25% - 3% * (HP цели / HP отряда),  предел [5%; 75%]
-// Источник неофициальный, а формула у всех этих умений одна, поэтому для медведей это
-// и есть шанс отбрасывающего удара. Показываем только процент, без названия умения:
-// каким полем отряда помечено само умение - пока неизвестно.
+// Вероятностные умения (отбрасывающий удар, ослепление, оглушение и прочие): шанс зависит
+// от суммарного оставшегося здоровья бьющего отряда (DHP) и цели (THP). Формула из справки
+// игры, английская версия страницы умений (/about-game-special-abilities) даёт её дословно:
+//   DHP >= THP: P = 25% + 3% * (DHP / THP)
+//   DHP <  THP: P = 25% - 3% * (THP / DHP),  предел [5%; 75%]
+// Там же сказано, что момент расчёта разный: у оглушающего удара, смертельной атаки и
+// останавливающего выстрела шанс считается до удара, а у ослепления, атаки страхом,
+// отбрасывающего удара, калечащего ранения, удара хлыстом, удара молнией и штурма - после
+// удара, по здоровью, которое уже уменьшилось. Для второй группы наш процент считается по
+// здоровью до удара, то есть завышен; помечаем его "~".
+//
+// Какие умения есть у отряда, берём из базы самой игры. Умения приходят в пакете боя
+// списком имён и становятся полями объекта отряда (show_polep.js, разбор пакета), а их
+// названия и описания сервер присылает отдельно в abil_names и abil_desc - по ним игра
+// рисует список умений в окне отряда (prepare_info). Вероятностные умения помечены в
+// описании отдельной строкой ("Вероятностное умение" / "Triggering special ability"),
+// её и ищем. Поэтому список умений нигде не зашит и не устареет после обновления игры.
+// Пока сервер базу не прислал, процент не показываем совсем.
 //
 // Шанс попадания по бестелесным (призраки, духи, привидения): физическая атака успешна лишь
 // в половине случаев, но подряд не бывает трёх промахов и трёх попаданий - после двух
@@ -66,9 +77,10 @@
   // Окна игры, при открытых которых блок у курсора не показываем
   const BLOCKING_WINDOWS = ['win_InfoCreatureEffect', 'win_InfoCreature', 'win_InfoHero', 'win_InfoHero2', 'win_BattleResult'];
 
-  // Поля отряда для умения "Бестелесное существо". Поле не выяснено, поэтому таких существ
-  // опознаём по имени (ниже), а это задел на случай, когда флаг станет известен.
-  const INCORPOREAL_FIELDS = [];
+  // Поля отряда для умения "Бестелесное существо". incorporeal - флаг самой игры: его ставит
+  // разбор пакета боя, по нему же окно отряда решает, показывать ману. Имена ниже остаются
+  // запасным вариантом на случай, если флага в объекте не окажется.
+  const INCORPOREAL_FIELDS = ['incorporeal'];
 
   // Бестелесные существа по внутреннему имени игры. Сверено по army_info.php:
   // ghost - Привидения / Ghosts, spectre - Призраки / Apparitions, poltergeist - Духи /
@@ -93,6 +105,26 @@
   const INCORPOREAL_TITLES = IS_RU
     ? ['привидения', 'призраки', 'духи']
     : ['ghosts', 'apparitions', 'poltergeists'];
+
+  // Строка, которой справка игры помечает вероятностное умение в описании. Приходит в
+  // abil_desc вместе с остальной базой умений, язык - тот же, что и у игры
+  const PROB_MARK = IS_RU ? 'Вероятностное умение' : 'Triggering special ability';
+
+  // Умения с этой пометкой, к которым формула по здоровью всё равно не применима:
+  // у волшебного зеркала шанс фиксированный (40%) и это защита от магии, а не атака;
+  // задира срабатывает, когда бьют соседа, а не когда бьём мы; у призменного дыхания шанс
+  // зависит от удачи, у удара лапой - от числа пройденных до цели клеток. Для них процента нет
+  const PROB_EXCLUDE = IS_RU
+    ? ['волшебное зеркало', 'задира', 'призменное дыхание', 'удар лапой']
+    : ['magic mirror', 'cover ally', 'prismatic breath', 'paw knock'];
+
+  // Умения, у которых игра считает шанс уже после удара: наш расчёт идёт по здоровью до
+  // удара, поэтому процент завышен и помечается "~"
+  const PROB_AFTER_HIT = IS_RU
+    ? ['ослепление', 'атака страхом', 'отбрасывающий удар', 'калечащее ранение',
+       'удар хлыстом', 'удар молнией', 'штурм']
+    : ['blinding brilliance', 'fear attack', 'knockback', 'mayhem',
+       'shadow whip', 'thunderbolt', 'unruly'];
 
   // Фразы лога берём те же, что уже выверены в battle_damage_tooltip_gm
   const PHRASES = IS_RU ? {
@@ -141,7 +173,7 @@
     return Math.min(1, Math.max(0, chance));
   }
 
-  // Шанс вероятностного умения от суммарного здоровья отряда и цели
+  // Шанс вероятностного умения от суммарного оставшегося здоровья отряда и цели
   function abilityChance(hpSelf, hpTarget) {
     if (!(hpSelf > 0) || !(hpTarget > 0)) return null;
     const raw = hpSelf > hpTarget
@@ -253,6 +285,33 @@
     if (INCORPOREAL_FIELDS.some(function (field) { return !!unit[field]; })) return true;
     if (INCORPOREAL_NAMES.indexOf(baseName(unit)) > -1) return true;
     return INCORPOREAL_TITLES.indexOf(String(unit.nametxt || '').toLowerCase()) > -1;
+  }
+
+  // Название умения из базы игры: в abil_names оно бывает с двоеточием на конце,
+  // а у умений с числом игра дописывает процент уже сама, нам достаточно имени
+  function abilityTitle(key) {
+    const names = w.abil_names;
+    const title = names && names[key];
+    return typeof title === 'string' ? title.replace(/[\s:.,]+$/, '').trim() : '';
+  }
+
+  // Вероятностные умения отряда по базе боя. Флаг умения - обычное поле объекта отряда,
+  // значение -1 означает, что умение отключено (игра рисует его серым), такое не считаем
+  function probAbilities(unit) {
+    const names = w.abil_names, descriptions = w.abil_desc;
+    if (!names || !descriptions) return [];
+    const found = [];
+    for (const key in names) {
+      const flag = unit[key];
+      if (!flag || flag === -1) continue;
+      if (String(descriptions[key] || '').indexOf(PROB_MARK) < 0) continue;
+      const title = abilityTitle(key);
+      if (!title) continue;
+      const lower = title.toLowerCase();
+      if (PROB_EXCLUDE.indexOf(lower) > -1) continue;
+      found.push({ title: title, approx: PROB_AFTER_HIT.indexOf(lower) > -1 });
+    }
+    return found;
   }
 
   // Исходы двух последних физических ударов по бестелесному отряду: true - попадание
@@ -486,6 +545,7 @@
   w.hwmChancesDebug = function () {
     return {
       installed: hooked, onTop: !!(scene && scene.procceddamage === hookFn),
+      abilityBase: w.abil_names ? Object.keys(w.abil_names).length : 0,
       partial: partial, logRead: logRead, turnUnit: turnUnit,
       luckHits: luckHits, luckMisses: luckMisses,
       moraleHits: moraleHits, moraleMisses: moraleMisses, streak: streak,
@@ -502,6 +562,9 @@
             heroLuck: ownerHero(unit) && ownerHero(unit).luck,
             usedLuck: stackLuck(unit), usedMorale: stackMorale(unit),
             lname: unit.lname, incorporeal: isIncorporeal(unit),
+            probAbilities: probAbilities(unit).map(function (ability) {
+              return ability.title + (ability.approx ? ' (~)' : '');
+            }),
           });
         }
         return out;
@@ -544,33 +607,37 @@
     panel.appendChild(panelRow(TEXT.moraleShort, moraleChance, morale < 0));
   }
 
-  // Голый процент под цифрами урона: подписи там не нужны, место занято полем боя.
-  // Шанс умения зелёный, шанс попадания по бестелесному голубой, нулевой шанс красный
-  function chanceLine(chance, className) {
+  // Строка под цифрами урона. Шанс умения зелёный и подписан названием умения,
+  // шанс попадания по бестелесному голубой и без подписи, нулевой шанс красный
+  function chanceLine(text, className) {
     const line = document.createElement('div');
     line.className = className;
-    line.textContent = percent(chance);
+    line.textContent = text;
     return line;
   }
 
   // Подпись у цифр урона - только шансы самого удара: удачу и БД показывает панель.
   // Возвращает false, если показывать нечего, и тогда подпись прячется
-  function renderTip(target, attacker) {
+  function renderTip(target, attacker, abilities) {
     tip.textContent = '';
     const index = target.obj_index;
     const lines = [];
 
-    if (attacker) {
+    // Процент только у тех, у кого вероятностное умение действительно есть
+    if (attacker && abilities.length) {
       const chance = abilityChance(stackHp(attacker), stackHp(target));
       const final = chance !== null && hasSecondTry(attacker.obj_index) ? withSecondTry(chance) : chance;
-      lines.push(chanceLine(final, 'hwm-bc-val'));
+      for (const ability of abilities) {
+        const mark = ability.approx && final !== null ? '~' : '';
+        lines.push(chanceLine(ability.title + ': ' + mark + percent(final), 'hwm-bc-val'));
+      }
     }
 
     // Шанс попадания по бестелесному зависит от двух предыдущих исходов по этой цели:
     // после двух промахов удар гарантированно дойдёт, после двух попаданий гарантированно нет
     if (isIncorporeal(target)) {
       const chance = hitChance(index);
-      lines.push(chanceLine(chance, chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-hit'));
+      lines.push(chanceLine(percent(chance), chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-hit'));
     }
 
     if (!lines.length) return false;
@@ -736,11 +803,14 @@
     const candidate = getUnit(activeIndex());
     const attacker = candidate && !candidate.rock && candidate.nownumber > 0 &&
       candidate.obj_index !== targetIndex && candidate.side !== target.side ? candidate : null;
+    const abilities = attacker ? probAbilities(attacker) : [];
     const own = attacker ? attacker.obj_index : 0;
+    // Умения входят в ключ: база приходит с сервера и до её прихода список пуст
     const key = [own, targetIndex, attacker ? stackHp(attacker) : 0, stackHp(target),
+      abilities.map(function (ability) { return ability.title; }).join(','),
       (streak[targetIndex] || []).join(',')].join('|');
     if (key !== tipKey) {
-      tipShown = renderTip(target, attacker);
+      tipShown = renderTip(target, attacker, abilities);
       tipKey = key;
     }
     if (!tipShown) {
