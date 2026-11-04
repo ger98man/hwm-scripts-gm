@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения по наведённой цели (отбрасывающий удар медведей и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.3
+// @version        0.4
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -35,8 +35,9 @@
 // только что шанс зависит от суммарного здоровья отряда и цели, без чисел. Числа из FAQ:
 //   HP отряда >  HP цели: P = 25% + 3% * (HP отряда / HP цели)
 //   HP отряда <= HP цели: P = 25% - 3% * (HP цели / HP отряда),  предел [5%; 75%]
-// Это неофициальный источник, поэтому помечаем число как справочное.
-// Какими полями отряда помечены сами умения - пока неизвестно, см. ABILITY_FIELDS.
+// Источник неофициальный, а формула у всех этих умений одна, поэтому для медведей это
+// и есть шанс отбрасывающего удара. Показываем только процент, без названия умения:
+// каким полем отряда помечено само умение - пока неизвестно.
 //
 // Шанс попадания по бестелесным (призраки, духи, привидения): физическая атака успешна лишь
 // в половине случаев, но подряд не бывает трёх промахов и трёх попаданий - после двух
@@ -55,18 +56,15 @@
   // На столько строка лога про удачу/мораль может разойтись по времени со своим испытанием
   const LINE_WINDOW_MS = 2000;
   const PANEL_KEY = 'hwm_battle_chances_panel';
-  // Отступ блока у курсора: чтобы он не стоял прямо под мышкой и не закрывал
-  // цифры урона, которые игра рисует у фигуры наведённого отряда
+  // Запас от цифр урона до подписи и от курсора до подписи, когда цифр нет
+  const LABEL_GAP = 4;
   const CURSOR_GAP = 28;
+  // Внутри контейнера цифр урона вторая строка стоит на uron_data.y + 36 (show_polep.js)
+  const URON_LINE2_Y = 36;
+  // Запасной размер шрифта цифр урона, если глобальной переменной игры нет
+  const URON_FONT_SIZE = 35;
   // Окна игры, при открытых которых блок у курсора не показываем
   const BLOCKING_WINDOWS = ['win_InfoCreatureEffect', 'win_InfoCreature', 'win_InfoHero', 'win_InfoHero2', 'win_BattleResult'];
-
-  // Вероятностные умения: поле объекта отряда -> название умения.
-  // Поля пока не выяснены (нужен полный дамп полей отряда, см. tasks/battle-chances/todo.md).
-  // Пока таблица пуста, шанс показывается без названия умения - формула у всех этих умений
-  // одна, поэтому для медведей это и есть шанс отбрасывающего удара.
-  // Как только поле известно, добавьте строку вида 'otbrasyvanie': 'Отбрасывающий удар'.
-  const ABILITY_FIELDS = {};
 
   // Поля отряда для умения "Бестелесное существо". Поле не выяснено, поэтому таких существ
   // опознаём по имени (ниже), а это задел на случай, когда флаг станет известен.
@@ -87,15 +85,9 @@
 
   const IS_RU = location.hostname.indexOf('heroeswm') > -1;
 
-  const TEXT = IS_RU ? {
-    luckShort: 'ЛАК', moraleShort: 'БД', ability: 'Вероятностное умение',
-    hitChance: 'Шанс попадания', afterMisses: 'два промаха подряд', afterHits: 'два попадания подряд',
-    reference: 'справочно',
-  } : {
-    luckShort: 'LUCK', moraleShort: 'MORALE', ability: 'Probabilistic ability',
-    hitChance: 'Hit chance', afterMisses: 'two misses in a row', afterHits: 'two hits in a row',
-    reference: 'reference',
-  };
+  const TEXT = IS_RU
+    ? { luckShort: 'ЛАК', moraleShort: 'БД' }
+    : { luckShort: 'LUCK', moraleShort: 'MORALE' };
 
   // Подписи бестелесных существ: запас на случай, когда внутреннего имени в объекте нет
   const INCORPOREAL_TITLES = IS_RU
@@ -116,16 +108,17 @@
   const style = document.createElement('style');
   style.textContent =
     '#hwm_bc_panel,#hwm_bc_tip{position:fixed;z-index:2147483645;box-sizing:border-box;' +
+    'display:none;white-space:nowrap;}' +
+    '#hwm_bc_panel{min-width:84px;cursor:move;user-select:none;padding:4px 8px;' +
     'background:rgba(30,24,14,.92);border:1px solid #b8964f;border-radius:4px;color:#f0e6cc;' +
-    'font:12px Verdana,Arial,sans-serif;line-height:1.45;padding:4px 8px;}' +
-    '#hwm_bc_panel{display:none;min-width:84px;cursor:move;user-select:none;}' +
-    '#hwm_bc_tip{display:none;pointer-events:none;white-space:nowrap;}' +
-    '#hwm_bc_panel b,#hwm_bc_tip b{color:#f0d999;}' +
-    '#hwm_bc_panel .hwm-bc-head,#hwm_bc_tip .hwm-bc-head{font-weight:bold;color:#f0d999;' +
-    'margin-bottom:3px;white-space:nowrap;}' +
+    'font:12px Verdana,Arial,sans-serif;line-height:1.45;}' +
+    // Подпись у цифр урона: без плашки и тем же начертанием, что и сами цифры
+    '#hwm_bc_tip{pointer-events:none;font:bold 15px Arial,Verdana,sans-serif;line-height:1.15;' +
+    'text-shadow:-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000,0 0 3px #000;}' +
+    '#hwm_bc_panel b{color:#f0d999;}' +
     '#hwm_bc_panel .hwm-bc-val,#hwm_bc_tip .hwm-bc-val{color:#9fe08a;font-weight:bold;}' +
     '#hwm_bc_panel .hwm-bc-neg,#hwm_bc_tip .hwm-bc-neg{color:#ff8a7a;font-weight:bold;}' +
-    '#hwm_bc_panel .hwm-bc-dim,#hwm_bc_tip .hwm-bc-dim{color:#9c9483;}';
+    '#hwm_bc_tip .hwm-bc-hit{color:#7fc8ff;font-weight:bold;}';
   document.head.appendChild(style);
 
   const panel = document.createElement('div');
@@ -249,14 +242,6 @@
     const unit = index > 0 && getUnit(index);
     if (!unit || unit.hero || unit.rock || unit.statix || !(unit.nownumber > 0)) return 0;
     return index;
-  }
-
-  // Умение из таблицы, если его поле известно и стоит у отряда
-  function knownAbility(unit) {
-    for (const field in ABILITY_FIELDS) {
-      if (unit[field]) return ABILITY_FIELDS[field];
-    }
-    return null;
   }
 
   // Внутреннее имя существа без суффикса анимации: spectreani -> spectre
@@ -538,13 +523,6 @@
     return line;
   }
 
-  function head(text) {
-    const line = document.createElement('div');
-    line.className = 'hwm-bc-head';
-    line.textContent = text;
-    return line;
-  }
-
   // Строка панели: только текущий шанс, "~" - счётчики неполные, "-" - шанса нет
   function panelRow(label, chance, isNegative) {
     const text = chance === null ? '-' : (partial ? '~' : '') + percent(chance);
@@ -566,19 +544,17 @@
     panel.appendChild(panelRow(TEXT.moraleShort, moraleChance, morale < 0));
   }
 
-  // Шанс с пометкой "справочно" в той же строке: лишняя строка закрывала бы поле
-  function referenceRow(label, chance) {
-    const line = row(label, percent(chance), 'hwm-bc-val');
-    const mark = document.createElement('span');
-    mark.className = 'hwm-bc-dim';
-    mark.textContent = ' ' + TEXT.reference;
-    line.appendChild(mark);
+  // Голый процент под цифрами урона: подписи там не нужны, место занято полем боя.
+  // Шанс умения зелёный, шанс попадания по бестелесному голубой, нулевой шанс красный
+  function chanceLine(chance, className) {
+    const line = document.createElement('div');
+    line.className = className;
+    line.textContent = percent(chance);
     return line;
   }
 
-  // Блок у курсора - только то, что относится к удару: удача и БД постоянны, поэтому
-  // для наведённого отряда их показывает панель. Возвращает false, если показывать нечего:
-  // тогда блок прячется и не закрывает фигуру с цифрами урона
+  // Подпись у цифр урона - только шансы самого удара: удачу и БД показывает панель.
+  // Возвращает false, если показывать нечего, и тогда подпись прячется
   function renderTip(target, attacker) {
     tip.textContent = '';
     const index = target.obj_index;
@@ -587,24 +563,18 @@
     if (attacker) {
       const chance = abilityChance(stackHp(attacker), stackHp(target));
       const final = chance !== null && hasSecondTry(attacker.obj_index) ? withSecondTry(chance) : chance;
-      lines.push(referenceRow(knownAbility(attacker) || TEXT.ability, final));
+      lines.push(chanceLine(final, 'hwm-bc-val'));
     }
 
     // Шанс попадания по бестелесному зависит от двух предыдущих исходов по этой цели:
     // после двух промахов удар гарантированно дойдёт, после двух попаданий гарантированно нет
     if (isIncorporeal(target)) {
       const chance = hitChance(index);
-      const reason = chance === 0.5 ? '' :
-        ' (' + (chance === 1 ? TEXT.afterMisses : TEXT.afterHits) + ')';
-      lines.push(row(TEXT.hitChance, percent(chance) + reason,
-        chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-val'));
+      lines.push(chanceLine(chance, chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-hit'));
     }
 
     if (!lines.length) return false;
 
-    tip.appendChild(head(attacker
-      ? (attacker.nametxt || '?') + ' -> ' + (target.nametxt || '?')
-      : (target.nametxt || '#' + index)));
     for (const line of lines) tip.appendChild(line);
     return true;
   }
@@ -674,8 +644,38 @@
       e.clientY >= rect.top && e.clientY <= rect.bottom;
   }, true);
 
-  // Со смещением от курсора, с переворотом у краёв экрана
+  // Цифры урона рисует сама игра: контейнер myuron висит у курсора (showuron
+  // в onmousemovep.js), внутри него две строки на uron_data.y + 3 и + 36, а дочерний
+  // myuron2 масштабируется под размер поля. Отсюда и считаем левый нижний угол цифр
+  // в координатах canvas - те же, что и scr_x/scr_y у отрядов
+  function uronCorner() {
+    const box = w.myuron;
+    if (!box || typeof w.get_X !== 'function' || typeof w.get_Y !== 'function') return null;
+    try {
+      if (typeof w.get_visible === 'function' && !w.get_visible(box)) return null;
+      const x = w.get_X(box), y = w.get_Y(box);
+      if (!isFinite(x) || !isFinite(y)) return null;
+      const scale = (typeof w.get_scaleY === 'function' && w.myuron2 ? w.get_scaleY(w.myuron2) : 1) || 1;
+      const data = w.uron_data || {};
+      const font = parseFloat(w.uron_font_size) || URON_FONT_SIZE;
+      const left = parseFloat(data.x) || 0;
+      const top = parseFloat(data.y) || 0;
+      return { x: x + left * scale, y: y + (top + URON_LINE2_Y + font) * scale };
+    } catch (e) { return null; }
+  }
+
+  // Под цифрами урона, а если игра их не рисует - от курсора, с переворотом у краёв экрана
   function placeTip() {
+    const field = getField();
+    const rect = field && field.getBoundingClientRect();
+    const corner = rect && rect.width > 0 && field.width ? uronCorner() : null;
+    if (corner) {
+      const kx = rect.width / field.width;
+      const ky = field.height ? rect.height / field.height : kx;
+      tip.style.left = Math.round(rect.left + corner.x * kx) + 'px';
+      tip.style.top = Math.round(rect.top + corner.y * ky + LABEL_GAP) + 'px';
+      return;
+    }
     const width = tip.offsetWidth, height = tip.offsetHeight;
     const right = mouse.x + CURSOR_GAP;
     const below = mouse.y + CURSOR_GAP;
