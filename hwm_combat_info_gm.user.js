@@ -3,8 +3,8 @@
 // @author         ger98man
 // @license        MIT
 // @namespace      hwm_combat_info
-// @description    В бою под окном информации об отряде или герое показывает здоровье, численность, позицию на шкале АТБ, живые отряды армии и умения по фракциям
-// @version        1.0
+// @description    В бою под окном информации об отряде показывает здоровье и численность, а под окном героя — здоровье армий обеих сторон
+// @version        1.1
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_combat_info_gm.user.js
@@ -29,11 +29,9 @@
   const INFO_WINDOWS = ['win_InfoCreature', 'win_InfoCreatureEffect', 'win_InfoHero', 'win_InfoHero2'];
 
   const TEXT = location.hostname.indexOf('heroeswm') > -1 ? {
-    size: 'Численность', health: 'Здоровье', atb: 'Позиция АТБ', army: 'Здоровье армии', alive: 'Живых отрядов', skills: 'Умения',
-    factions: ['Рыцарь', 'Некромант', 'Маг', 'Эльф', 'Варвар', 'Тёмный эльф', 'Демон', 'Гном', 'Степной варвар', 'Фараон'],
+    size: 'Численность', health: 'Здоровье', atb: 'Позиция АТБ', armies: 'Армии',
   } : {
-    size: 'Stack size', health: 'Health', atb: 'ATB position', army: 'Army health', alive: 'Stacks alive', skills: 'Skills',
-    factions: ['Knight', 'Necromancer', 'Wizard', 'Elf', 'Barbarian', 'Dark elf', 'Demon', 'Dwarf', 'Tribal', 'Pharaoh'],
+    size: 'Stack size', health: 'Health', atb: 'ATB position', armies: 'Armies',
   };
 
   const style = document.createElement('style');
@@ -75,51 +73,66 @@
     };
   }
 
+  function formatNumber(value) {
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
+  }
+
   function formatHealth(health) {
-    if (health.max === null) return health.now + '/?';
+    if (health.max === null) return formatNumber(health.now) + '/?';
     const percent = health.max > 0 ? Math.round(health.now / health.max * 100) : 0;
-    return health.now + '/' + health.max + ' (' + percent + '%)';
+    return formatNumber(health.now) + '/' + formatNumber(health.max) + ' (' + percent + '%)';
   }
 
-  // Призванные прямо в бою отряды не считаем: в начальной армии их не было
-  function armyLines(hero) {
+  // Стороны боя по владельцам: у одной стороны может быть несколько героев
+  function sidesByOwner() {
     const units = allUnits();
-    const army = Object.keys(units).map(function (key) {
-      return units[key];
-    }).filter(function (unit) {
-      return unit && !unit.hero && !unit.rock && unit.owner === hero.owner && !unit.summoned2;
+    const sides = {};
+    Object.keys(w.heroes || {}).forEach(function (owner) {
+      const hero = units[w.heroes[owner]];
+      if (hero && !hero.rock) sides[owner] = hero.side;
     });
-    const healths = army.map(stackHealth);
-    const unknown = healths.some(function (health) { return health.max === null; });
-    const total = {
-      now: healths.reduce(function (sum, health) { return sum + health.now; }, 0),
-      max: unknown ? null : healths.reduce(function (sum, health) { return sum + health.max; }, 0),
-    };
-    const alive = army.filter(function (unit) { return unit.nownumber > 0; }).length;
-    return [[TEXT.army, formatHealth(total)], [TEXT.alive, alive + '/' + army.length]];
+    return sides;
   }
 
-  function factionSkills(owner) {
-    const levels = w.umelka && w.umelka[owner];
-    if (!levels) return null;
-    const parts = [];
-    TEXT.factions.forEach(function (name, index) {
-      const level = levels[index + 1];
-      if (level > 0) parts.push(name + ' ' + level);
+  // Здоровье живых отрядов по сторонам. Призванных прямо в бою считаем наравне с остальными:
+  // на поле это такое же здоровье, которое придётся пробивать
+  function healthBySide() {
+    const units = allUnits();
+    const sides = sidesByOwner();
+    const totals = {};
+    Object.keys(units).forEach(function (key) {
+      const unit = units[key];
+      if (!unit || unit.hero || unit.rock) return;
+      const side = sides[unit.owner];
+      if (side === undefined) return;
+      totals[side] = (totals[side] || 0) + stackHealth(unit).now;
     });
-    return parts.length ? parts.join(', ') : null;
+    return totals;
+  }
+
+  // Сторона выбранного героя первой, остальные стороны вместе второй; процент - доля
+  // выбранной стороны в здоровье, оставшемся на поле. Если здоровья нет совсем, то и
+  // показывать нечего: null
+  function armiesLine(hero) {
+    const totals = healthBySide();
+    const own = totals[hero.side] || 0;
+    const rest = Object.keys(totals).reduce(function (sum, side) {
+      return Number(side) === hero.side ? sum : sum + totals[side];
+    }, 0);
+    if (own + rest === 0) return null;
+    const share = Math.round(own / (own + rest) * 100);
+    return [TEXT.armies, formatNumber(own) + ' / ' + formatNumber(rest) + ' (' + share + '%)'];
   }
 
   function describe(unit) {
-    const lines = [];
     if (unit.hero) {
-      lines.push.apply(lines, armyLines(unit));
-      const skills = factionSkills(unit.owner);
-      if (skills) lines.push([TEXT.skills, skills]);
-    } else {
-      lines.push([TEXT.size, unit.nownumber + '/' + unit.maxnumber]);
-      lines.push([TEXT.health, formatHealth(stackHealth(unit))]);
+      const armies = armiesLine(unit);
+      return armies === null ? [] : [armies];
     }
+    const lines = [
+      [TEXT.size, unit.nownumber + '/' + unit.maxnumber],
+      [TEXT.health, formatHealth(stackHealth(unit))],
+    ];
     if (unit.nowinit !== undefined) lines.push([TEXT.atb, unit.nowinit]);
     return lines;
   }
@@ -152,12 +165,12 @@
   function update() {
     const win = openWindow();
     const unit = win && selectedUnit();
-    if (!unit) {
+    const lines = unit ? describe(unit) : [];
+    if (!lines.length) {
       box.style.display = 'none';
       shown = '';
       return;
     }
-    const lines = describe(unit);
     const key = JSON.stringify(lines);
     if (key !== shown) {
       render(lines);
