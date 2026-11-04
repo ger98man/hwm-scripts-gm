@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name   battle_damage_tooltip_gm
 // @namespace    http://tampermonkey.net/
-// @version      3.2.3
+// @version      3.2.4
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js
@@ -174,13 +174,9 @@ const I18N = {
         keybindStartBattleLabel: "Начать бой",
         keybindFilterLog: "Отфильтровать лог по существу и открыть",
         // UI
-        btnListCollapsed: "Список🔽",
-        btnListOpen: "🔄",
-        btnChangeSide: "Сменить сторону",
         chosenDistance: "Выбранное расстояние",
         distanceJumpCells: (n) => `Прыжок на <u>${n}</u> клеток`,
         damage: "Урон",
-        damageTo: "Урон по",
         gateOwner: "Владелец",
         upravaPlaceholder: "Ник для управы",
         helpDamage: "урон",
@@ -190,10 +186,6 @@ const I18N = {
         "Тап на атакующее существо (клетка с существом помечается красным цветом), затем тап на атакуемое существо (клетка синим цветом). " +
         "Урон будет в боевом чате",
         // Settings labels/tooltips
-        sCoeffLabel: "⚖️коэф. урона",
-        sCoeffTip:
-        "отношение урон/хп (т.е. у кого больше всех коэф., с того выгоднее начинать. <br>" +
-        "Работает в списке уронов если нажать на \"Список\" в чате)",
         sDistanceLabel: "Расстояние между стеками",
         sDistanceTip:
         "Расстояние между атакующим и защищающимся стеками. Выбирать расстояние стрелочками в текстовом поле снизу. <br>" +
@@ -219,7 +211,6 @@ const I18N = {
         poisonInaccuracy: "Погрешность +-10%",
         targets: "Целей:<br>",
         targetNo: "Цель №<br>",
-        defaultCreature: "Высшие вампиры",
         // Spells
         spellNames: {
             meteor: "Метеоритный дождь",
@@ -259,13 +250,9 @@ const I18N = {
         keybindStartBattleLabel: "Start battle",
         keybindFilterLog: "Filter log by one creature and open",
         // UI
-        btnListCollapsed: "List🔽",
-        btnListOpen: "🔄",
-        btnChangeSide: "Switch side",
         chosenDistance: "Selected distance",
         distanceJumpCells: (n) => `Jump by <u>${n}</u> hexes`,
         damage: "Damage of",
-        damageTo: "Damage to",
         gateOwner: "Owner",
         upravaPlaceholder: "Filter by nickname",
         helpDamage: "damage",
@@ -274,10 +261,6 @@ const I18N = {
         "To view damage, the button must be active. Tap the attacker (the tile becomes red), then tap the target (the tile becomes blue). " +
         "Damage will be printed in the battle chat.",
         // Settings labels/tooltips
-        sCoeffLabel: "⚖️ dmg coeff.",
-        sCoeffTip:
-        "damage/HP ratio (i.e., whoever has the highest coeff. is the best to focus first). <br>" +
-        "Works in the damage list if you press \"List\" in chat.",
         sDistanceLabel: "Distance between stacks",
         sDistanceTip:
         "Distance between attacker and defender stacks. Change it with arrows in the number field below. <br>" +
@@ -302,7 +285,6 @@ const I18N = {
         poisonInaccuracy: "Inaccuracy ±10%",
         targets: "Targets:<br>",
         targetNo: "Target #<br>",
-        defaultCreature: "Vampire Lords",
         // Spells
         spellNames: {
             meteor: "Meteor shower",
@@ -425,25 +407,15 @@ outer_chat.insertAdjacentHTML("beforeend", `
 <div id="cre_distance_div" style="display: none"></div>
 <div id="individual_calc"></div>
 <div id="mag_calc"></div>
-<div id="dmg_list_container"></div>
-<button id="dmg_list_refresh" style="background-color: #3d3d29; opacity: 0.7; color: white; padding: 5px 10px; border: none; border-radius: 4px;  cursor: pointer">${t('btnListCollapsed')}</button>
-<select style="display : none; background-color: #333; color: white; margin: 10px" id="choose_cre"></select>
-<button id="change_side" style="background-color: #6b6b47; color: white; padding: 5px 10px; border: none; border-radius: 4px;  cursor: pointer; display: none">${t('btnChangeSide')}</button>
 <button id="collapse" style="background-color: #000000; color: white; padding: 5px 10px; border: none; border-radius: 4px;  cursor: pointer; display: none; margin:10px">❌</button> `)
 
 let last_individual_calc = {}
-let isOpen = false
 let ini_weight = 10;
-let chosen = { side: 1, creature: t("defaultCreature"), afterSideSwitchCre: { "-1": "", "1": "" } }
 let chat = document.getElementById("chat_inside");
-let select = document.getElementById("choose_cre")
-let refresh_button = document.getElementById("dmg_list_refresh")
-let side_button = document.getElementById("change_side")
 let collapse_button = document.getElementById("collapse")
 let individual_calc = document.querySelector("#individual_calc")
 let cre_distance_div = document.querySelector("#cre_distance_div")
 const settings_panel = document.querySelector("#webgl_settings_whole")
-let dmg_list_container = document.querySelector("#dmg_list_container")
 cre_distance_div.innerHTML = `<span>${t('chosenDistance')}: ${GM_getValue('cre_distance')}</span><br>`;
 
 // ========= utils ============
@@ -524,33 +496,6 @@ function upravaEvent(event) {
             child.classList.add("hidden");
         }
     }
-}
-const damageMultipliers = {
-    "doublestrike": 1.8, // двойной удар
-    "cleave": 1.75, // колун
-    "triplestrike": 2.5, // тройной удар
-    "doubleshoot": 2, // двойной выстрел
-    "assault": 1.3 // штурм
-}
-
-function evalStrength(attacker, defender) {
-    const cre_collection = stage.pole.obj;
-    let dmg = get_dmg_info(attacker.obj_index, defender.obj_index)
-    let practical_overall_hp;
-    if (cre_collection[defender.obj_index].attack > attacker.defence) {
-        practical_overall_hp = attacker.maxhealth * attacker.nownumber / (1 + 0.05 * Math.abs(cre_collection[defender.obj_index].attack - attacker.defence))
-    } else {
-        practical_overall_hp = attacker.maxhealth * attacker.nownumber * (1 + 0.05 * Math.abs(cre_collection[defender.obj_index].attack - attacker.defence))
-    }
-    let multiplier = 1;
-    for (const abil in damageMultipliers) {
-        if (attacker.data_string.includes(abil)) multiplier *= damageMultipliers[abil];
-    }
-    let avgDmg = ((dmg.max + dmg.min) / 2) * multiplier * (attacker.maxinit * attacker.initmodifier / 10);
-
-    let koef = avgDmg / ((attacker.nownumber - 1) * attacker.maxhealth + attacker.nowhealth);
-    if (attacker.hero || defender.hero) koef = 0;
-    return { avgDmg: avgDmg, koef: koef, practical_overall_hp: practical_overall_hp };
 }
 // инфа о гейтах на карте
 function initGates() {
@@ -836,11 +781,7 @@ function set_Display(element_arr, displayProperty) {
 
 function readjust_elements() {
     chat = document.getElementById("chat_inside");
-    select = document.getElementById("choose_cre")
-    refresh_button = document.getElementById("dmg_list_refresh")
-    side_button = document.getElementById("change_side")
     collapse_button = document.getElementById("collapse")
-    dmg_list_container = document.querySelector("#dmg_list_container")
     individual_calc = document.querySelector("#individual_calc")
     cre_distance_div = document.querySelector("#cre_distance_div")
 }
@@ -849,7 +790,6 @@ function readjust_elements() {
 
 let cre_distance = get_GM_value_if_exists('cre_distance', "")
 let cre_distance_on = get_GM_value_if_exists('cre_distance_on', false)
-let coeff_on = get_GM_value_if_exists('coeff_on', true)
 let animation_speed_on = get_GM_value_if_exists("animation_speed_on", false);
 let mag_damage_on = get_GM_value_if_exists("mag_damage_on", true);
 
@@ -2024,7 +1964,6 @@ document.body.addEventListener('input', function(event) {
             }
             if (!cre_distance_on) return
             GM_setValue('cre_distance', distance)
-            if (isOpen) refresh()
             individual_calc.innerHTML = individual_calc_innerHTML(last_individual_calc.atk_obj_index, last_individual_calc.def_obj_index)
             cre_distance_div.innerHTML = `${t('chosenDistance')}: <span style= "color:white">${GM_getValue('cre_distance')}</span><br>`
             break;
@@ -2106,16 +2045,7 @@ document.body.addEventListener('change', function(event) {
     switch (event.target.id) {
         case "mag_damage_on":
             mag_damage_on = GM_toggle_boolean("mag_damage_on", mag_damage_on);
-            if (isOpen) refresh();
             individual_calc.innerHTML = individual_calc_innerHTML(last_individual_calc.atk_obj_index, last_individual_calc.def_obj_index)
-            break;
-        case "coeff_on":
-            coeff_on = GM_toggle_boolean("coeff_on", coeff_on);
-            if (isOpen) refresh();
-            break;
-        case "choose_cre":
-            chosen.creature = select.value
-            refresh()
             break;
         case "cre_distance_on":
             cre_distance_on = GM_toggle_boolean("cre_distance_on", cre_distance_on)
@@ -2123,12 +2053,10 @@ document.body.addEventListener('change', function(event) {
             if (cre_distance_on) {
                 cre_distance_div.innerHTML = `<span>${t('chosenDistance')}: ${GM_getValue('cre_distance')}</span><br>`
                 cre_distance_div.style.display = "inline"
-                if (isOpen) refresh()
                 individual_calc.innerHTML = individual_calc_innerHTML(last_individual_calc.atk_obj_index, last_individual_calc.def_obj_index)
             } else {
                 cre_distance_div.innerHTML = ""
             }
-            if (isOpen) refresh()
             individual_calc.innerHTML = individual_calc_innerHTML(last_individual_calc.atk_obj_index, last_individual_calc.def_obj_index)
             break;
         case "animation_speed_on":
@@ -2149,21 +2077,9 @@ document.body.addEventListener('click', function(event) {
         GM_setValue('animation_speed_on', false)
     }
     switch (event.target.id) {
-        case "dmg_list_refresh":
-            readjust_elements()
-            refresh()
-            break
-        case "change_side":
-            chosen.afterSideSwitchCre[chosen.side] = chosen.creature
-            chosen.side = -chosen.side
-            chosen.creature = chosen.afterSideSwitchCre[chosen.side]
-            refresh()
-            break
         case "collapse":
             readjust_elements()
-            isOpen = false
-            refresh_button.innerHTML = t('btnListCollapsed');
-            set_Display([select, side_button, collapse_button, document.querySelector("#chosen_cre_heading"), dmg_list_container, individual_calc, cre_distance_div], "none")
+            set_Display([collapse_button, individual_calc, cre_distance_div], "none")
             break;
 
         case "cre_distance_plus":
@@ -3314,120 +3230,6 @@ function get_dmg_info(attacker_obj_index, defender_obj_index, koef = 1) {
     return { min: min_damage, max: max_damage, min_killed: min_killed, max_killed: max_killed, distance: dmg_dict.distance }
 }
 
-let defender_obj_id = 0
-let selected_id = 0
-
-function refresh() {
-    isOpen = true;
-    let cre_collection = stage.pole.obj;
-
-    if (cre_distance_on) {
-        cre_distance_div.style.display = "inline";
-        cre_distance_div.innerHTML = `<span>${t('chosenDistance')}: ${GM_getValue('cre_distance')}</span><br>`;
-    }
-
-    set_Display([select, side_button, collapse_button, document.querySelector("#chosen_cre_heading"), dmg_list_container, individual_calc], "inline");
-
-    refresh_button.innerHTML = "🔄";
-
-    let cre_list = Object.values(cre_collection);
-    cre_list.sort((a, b) => a.obj_index - b.obj_index);
-
-    dmg_list_container.innerHTML = "";
-    [...select.children].forEach(child => child.remove());
-
-    let found_defender = false;
-
-    cre_list.forEach(defender => {
-        if (defender.nownumber > 0 && defender.nametxt != "" && defender.side == chosen.side && defender.hero === undefined) {
-            let option_id = `cre_no${cre_list.indexOf(defender)}`;
-            select.insertAdjacentHTML("beforeend",
-                                      `<option id="${option_id}" value="${defender.obj_index}">
-                    ${defender.nametxt} [${defender.nownumber}]
-                </option>`
-                                     );
-
-            if (!found_defender) {
-                if (`${defender.obj_index}` == chosen.creature) found_defender = true;
-                defender_obj_id = defender.obj_index;
-                selected_id = [...select.children].indexOf(select.lastChild);
-            }
-        }
-    });
-
-    dmg_list_container.insertAdjacentHTML("beforeend", `
-        <div id="chosen_cre_heading" style="display:inline; background-color: ${physCalcColor}">
-            <span>${t("damageTo")} </span>
-            <span style="color:#ffffff; font-size: 110%; font-weight: bold;">
-                ${cre_collection[defender_obj_id].nametxt} [${cre_collection[defender_obj_id].nownumber}] :
-            </span>
-        </div>
-    `);
-
-    /* ===========================
-       COLLECT + CALCULATE
-    ============================ */
-
-    let attackerRows = [];
-
-    cre_list.forEach(attacker => {
-        if (attacker.side == -chosen.side && attacker.nownumber > 0 && attacker.nametxt != "") {
-            let dmg = get_dmg_info(attacker.obj_index, defender_obj_id);
-            let practical_overall_hp;
-
-            if (cre_collection[defender_obj_id].attack > attacker.defence) {
-                practical_overall_hp = attacker.maxhealth * attacker.nownumber /
-                    (1 + 0.05 * Math.abs(cre_collection[defender_obj_id].attack - attacker.defence));
-            } else {
-                practical_overall_hp = attacker.maxhealth * attacker.nownumber *
-                    (1 + 0.05 * Math.abs(cre_collection[defender_obj_id].attack - attacker.defence));
-            }
-
-            let coef = evalStrength(attacker, cre_collection[defender_obj_id]).koef;
-
-            attackerRows.push({ attacker, dmg, coef });
-        }
-    });
-
-
-    attackerRows.sort((a, b) => b.coef - a.coef);
-    const color1 = "#1a1a1a"; // dark row
-    const color2 = "#262626"; // slightly lighter row
-
-    attackerRows.forEach((row, index) => {
-        let { attacker, dmg, coef } = row;
-
-        let row_id = `row_no${index}`;
-        let koef_string = `<span title="коэф. урона">⚖️</span><b style="color:white">${coef.toFixed(2)}</b>`;
-
-        // pick alternating background color
-        let bgColor = index % 2 === 0 ? color1 : color2;
-
-        dmg_list_container.insertAdjacentHTML("beforeend", `
-            <p id="${row_id}" style="color:white; background-color:${bgColor}; padding:2px 5px; margin:0;">
-                <span style="text-decoration: underline;color:#bfbfbf">${attacker.nametxt}</span>
-                [${attacker.nownumber}] |
-                ${icons.dead.html}<b style="color:#bfbfbf">${dmg.min_killed}-${dmg.max_killed}</b>
-                 ${icons.damage.html}${dmg.min}-${dmg.max}
-                ${!attacker.hero ? koef_string : ""}
-            </p>
-        `);
-
-        dmg_list_container.insertAdjacentHTML("beforeend",
-                                              calcHellFireHTML(attacker, cre_collection[defender_obj_id], cre_collection, dmg)
-                                             );
-
-        dmg_list_container.insertAdjacentHTML("beforeend",
-                                              calcStormHTML(attacker, cre_collection[defender_obj_id])
-                                             );
-
-            dmg_list_container.insertAdjacentHTML("beforeend",
-                                                  calcMagicHTML(attacker, cre_collection[defender_obj_id], cre_collection, dmg)
-                                                 );
-    });
-
-    select.options.item(selected_id).selected = true;
-}
 function openHwmkbOverlay() {
     // Don't inject twice
     if (document.getElementById("hwmkb_overlay_host")) return;

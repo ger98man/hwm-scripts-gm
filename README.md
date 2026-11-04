@@ -4,7 +4,7 @@
 
 | Скрипт | Версия | Описание | |
 |---|---|---|---|
-| `battle_damage_tooltip_gm` | 3.2.3 | Просмотр урона любого отряда, улучшенный лог боя, фиксы и фичи (перечислены в описаниее) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js) |
+| `battle_damage_tooltip_gm` | 3.2.4 | Просмотр урона любого отряда, улучшенный лог боя, фиксы и фичи (перечислены в описаниее) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/battle_damage_tooltip_gm.user.js) |
 | `hwm_battle_chances_gm` | 0.4 | В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения по наведённой цели (отбрасывание медведей и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js) |
 | `hwm_battle_stats_gm` | 0.1 | В бою показывает суммарное здоровье обеих команд и рейтинг отрядов и героев по нанесённому урону | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_stats_gm.user.js) |
 | `hwm_combat_info_gm` | 1.0 | В бою под окном информации об отряде или герое показывает здоровье, численность, позицию на шкале АТБ, живые отряды армии и умения по фракциям | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_combat_info_gm.user.js) |
