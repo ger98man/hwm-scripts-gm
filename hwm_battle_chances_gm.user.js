@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения атакующего по наведённой цели с названием умения из базы игры (отбрасывающий удар, ослепление, оглушение и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.7
+// @version        0.8
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -39,8 +39,13 @@
 // Там же сказано, что момент расчёта разный: у оглушающего удара, смертельной атаки и
 // останавливающего выстрела шанс считается до удара, а у ослепления, атаки страхом,
 // отбрасывающего удара, калечащего ранения, удара хлыстом, удара молнией и штурма - после
-// удара, по здоровью, которое уже уменьшилось. Для второй группы наш процент считается по
-// здоровью до удара, то есть завышен; помечаем его "~".
+// удара и до ответки, по здоровью цели, которое уже уменьшилось. THP стоит в вычитаемом,
+// поэтому от удара шанс только растёт: наш расчёт по здоровью до удара даёт для второй
+// группы нижнюю границу, а не завышенное число. Такой процент помечаем ">=": настоящий
+// шанс не меньше показанного. Насколько больше - зависит от урона, а его считает не этот
+// скрипт, поэтому точнее не показываем.
+// Там же: ослепление, отбрасывающий удар, калечащее ранение, удар хлыстом и удар молнией
+// срабатывают и на ответном ударе - этих роллов мы не показываем вовсе.
 //
 // Какие умения есть у отряда, берём из базы самой игры. Умения приходят в пакете боя
 // списком имён и становятся полями объекта отряда (show_polep.js, разбор пакета), а их
@@ -125,8 +130,8 @@
        'knocking shot', 'lethargizing malady', 'mayhem', 'paralyzing', 'piercing shot',
        'purge', 'shadow whip', 'stun', 'stunning shot', 'thunderbolt', 'unruly'];
 
-  // Умения, у которых игра считает шанс уже после удара: наш расчёт идёт по здоровью до
-  // удара, поэтому процент завышен и помечается "~"
+  // Умения, у которых игра считает шанс уже после удара, по уменьшенному здоровью цели:
+  // наш расчёт идёт по здоровью до удара и потому даёт нижнюю границу, помечаемую ">="
   const PROB_AFTER_HIT = IS_RU
     ? ['ослепление', 'атака страхом', 'отбрасывающий удар', 'калечащее ранение',
        'удар хлыстом', 'удар молнией', 'штурм']
@@ -322,7 +327,7 @@
       if (!title) continue;
       const lower = titleKey(title);
       if (PROB_NAMES.indexOf(lower) < 0) continue;
-      found.push({ title: title, approx: PROB_AFTER_HIT.indexOf(lower) > -1 });
+      found.push({ title: title, atLeast: PROB_AFTER_HIT.indexOf(lower) > -1 });
     }
     return found;
   }
@@ -591,7 +596,7 @@
             usedLuck: stackLuck(unit), usedMorale: stackMorale(unit),
             lname: unit.lname, incorporeal: isIncorporeal(unit),
             probAbilities: probAbilities(unit).map(function (ability) {
-              return ability.title + (ability.approx ? ' (~)' : '');
+              return ability.title + (ability.atLeast ? ' (>=)' : '');
             }),
           });
         }
@@ -656,7 +661,7 @@
       const chance = abilityChance(stackHp(attacker), stackHp(target));
       const final = chance !== null && hasSecondTry(attacker.obj_index) ? withSecondTry(chance) : chance;
       for (const ability of abilities) {
-        const mark = ability.approx && final !== null ? '~' : '';
+        const mark = ability.atLeast && final !== null ? '≥' : '';
         lines.push(chanceLine(ability.title + ': ' + mark + percent(final), 'hwm-bc-val'));
       }
     }
