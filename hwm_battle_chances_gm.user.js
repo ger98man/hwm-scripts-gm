@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения атакующего по наведённой цели с названием умения из базы игры (отбрасывающий удар, ослепление, оглушение и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.8
+// @version        0.9
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -21,6 +21,10 @@
 // Удача и боевой дух: шанс не равен "10% за единицу", он плавает по ходу боя.
 // Справка игры (/ob-igre-udacha-i-boevoy-duh) даёт формулу со счётчиками у каждого отряда:
 //   P = p ^ (1 + [сработало раз] - [не сработало раз] * p/(1-p)),  p = удача/10 или мораль/10
+// Ни удача, ни мораль не действуют на самого героя: справка говорит это про удачу прямо,
+// а мораль везде описана как параметр отряда, и окно сведений самой игры для героя не
+// строится вовсе (prepare_info: "if (this.obj[i].hero){return 0;}"). Поэтому у героя обе
+// строки панели показывают "-", а его ход за испытание морали не считается.
 // Счётчики у удачи и морали отдельные. После срабатывания шанс падает, после серии
 // несрабатываний растёт; в среднем на бесконечности выходит 10% на единицу.
 // В клиенте этих счётчиков нет (проверено дампом объектов боя), поэтому считаем их сами:
@@ -430,7 +434,8 @@
     count(luckMisses, attacker);
   }
 
-  // Испытание морали: ход отряда
+  // Испытание морали: ход отряда. Ход героя испытанием не считается - мораль у него
+  // не своя, а армейская
   function noteTurn() {
     const front = (Array.isArray(w.atb) && parseInt(w.atb[0])) || 0;
     if (!(front > 0) || front === turnUnit) return;
@@ -439,6 +444,8 @@
       turnSeeded = true;
       return;
     }
+    const unit = getUnit(front);
+    if (unit && unit.hero) return;
     const now = Date.now();
     lastTurnUnit = front;
     lastTurnAt = now;
@@ -631,10 +638,12 @@
     const luck = stackLuck(unit);
     const morale = stackMorale(unit);
 
-    // Удача героя не действует на него самого, только на его отряды
+    // Удача и мораль героя не действуют на него самого, только на его отряды:
+    // у героя обе строки показывают "-"
     const luckChance = unit.hero ? null
       : adaptiveChance(luck, luckHits[index] || 0, luckMisses[index] || 0);
-    const moraleChance = adaptiveChance(morale, moraleHits[index] || 0, moraleMisses[index] || 0);
+    const moraleChance = unit.hero ? null
+      : adaptiveChance(morale, moraleHits[index] || 0, moraleMisses[index] || 0);
 
     panel.appendChild(panelRow(TEXT.luckShort, luckChance, luck < 0));
     panel.appendChild(panelRow(TEXT.moraleShort, moraleChance, morale < 0));
