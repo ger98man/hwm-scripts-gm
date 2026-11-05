@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения атакующего по наведённой цели с названием умения из базы игры (отбрасывающий удар, ослепление, оглушение и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.6
+// @version        0.7
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -55,7 +55,9 @@
 // в половине случаев, но подряд не бывает трёх промахов и трёх попаданий - после двух
 // промахов всегда попадание, после двух попаданий всегда промах. Поэтому шанс равен ровно
 // 0%, 50% или 100%, если помнить два предыдущих исхода по этой цели. Попадания видим хуком
-// на урон, промахи - строкой лога, магический урон счёт сбрасывает.
+// на урон, промахи - строкой лога. Справка считает подряд только физические исходы, поэтому
+// магия счёт не трогает: она не испытание. Пока два предыдущих исхода не известны - скрипт
+// открыт посреди боя или промах пришёл по одному из одноимённых отрядов - 50% помечаем "~".
 
 (function () {
   'use strict';
@@ -88,10 +90,6 @@
   // Poltergeists. У астральных (ghostdragon) и призрачных (spectraldragon) драконов
   // бестелесности нет, поэтому имя сверяем целиком, а не по началу.
   const INCORPOREAL_NAMES = ['ghost', 'spectre', 'poltergeist'];
-
-  // Магия сбрасывает счёт попаданий по бестелесному. Исключение - "Разложение":
-  // если выяснится, каким значением игра помечает его в magicdamage, добавьте сюда
-  const NO_RESET_MAGIC = [];
 
   // Перк, дающий вторую попытку срабатывания умения (P2 = 2P - P^2). Номер не выяснен.
   const SECOND_TRY_PERK = null;
@@ -331,11 +329,19 @@
 
   // Исходы двух последних физических ударов по бестелесному отряду: true - попадание
   const streak = {};
+  // Цели, по которым счёт прерывался: два последних исхода знаем не наверняка
+  const streakLost = {};
 
   function noteStreak(index, isHit) {
     const list = streak[index] || (streak[index] = []);
     list.push(isHit);
     if (list.length > 2) list.shift();
+  }
+
+  // Счёт по цели потерян: промах пришёл по одному из одноимённых отрядов
+  function forgetStreak(index) {
+    delete streak[index];
+    streakLost[index] = true;
   }
 
   // Шанс попадания по бестелесному: после двух промахов всегда попадание,
@@ -344,6 +350,15 @@
     const list = streak[index];
     if (list && list.length === 2 && list[0] === list[1]) return list[0] ? 0 : 1;
     return 0.5;
+  }
+
+  // Шанс точен, когда оба предыдущих исхода известны. Когда известен один или ни одного,
+  // 50% верны лишь при полной истории цели: иначе до нас по ней уже били и шанс может
+  // оказаться нулевым или гарантированным
+  function isHitChanceExact(index) {
+    const list = streak[index];
+    if (list && list.length === 2) return true;
+    return !partial && !streakLost[index];
   }
 
   function hasSecondTry(index) {
@@ -380,6 +395,7 @@
     for (const key in moraleMisses) delete moraleMisses[key];
     for (const key in lastHitAt) delete lastHitAt[key];
     for (const key in streak) delete streak[key];
+    for (const key in streakLost) delete streakLost[key];
     lastAttacker = 0;
     lastAttackAt = 0;
     lastTurnUnit = 0;
@@ -470,7 +486,7 @@
       noteStreak(found[0], false);
       return;
     }
-    found.forEach(function (index) { delete streak[index]; });
+    found.forEach(function (index) { forgetStreak(index); });
   }
 
   function hasPhrase(line, list) {
@@ -514,13 +530,9 @@
   function onDamage(i) {
     const victim = this.obj[i];
     if (!victim) return;
-    // Магия удачу не проверяет, зато сбрасывает счёт попаданий по бестелесному
-    if (victim.magicdamage) {
-      const kind = String(victim.magicdamage);
-      const keeps = NO_RESET_MAGIC.some(function (name) { return kind.indexOf(name) > -1; });
-      if (!keeps && isIncorporeal(victim)) delete streak[i];
-      return;
-    }
+    // Магия не проверяет ни удачу, ни счёт по бестелесному: справка считает подряд
+    // только физические промахи и попадания, магия в этот счёт не входит
+    if (victim.magicdamage) return;
     // Физический удар дошёл до бестелесного: это попадание
     if (isIncorporeal(victim)) noteStreak(i, true);
     const attacker = parseInt(victim.damaged) || 0;
@@ -563,7 +575,8 @@
       abilityBase: w.abil_names ? Object.keys(w.abil_names).length : 0,
       partial: partial, logRead: logRead, turnUnit: turnUnit,
       luckHits: luckHits, luckMisses: luckMisses,
-      moraleHits: moraleHits, moraleMisses: moraleMisses, streak: streak,
+      moraleHits: moraleHits, moraleMisses: moraleMisses,
+      streak: streak, streakLost: streakLost,
       stacks: (function () {
         const out = [];
         const all = scene && scene.obj ? scene.obj : {};
@@ -652,7 +665,8 @@
     // после двух промахов удар гарантированно дойдёт, после двух попаданий гарантированно нет
     if (isIncorporeal(target)) {
       const chance = hitChance(index);
-      lines.push(chanceLine(percent(chance), chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-hit'));
+      const mark = isHitChanceExact(index) ? '' : '~';
+      lines.push(chanceLine(mark + percent(chance), chance === 0 ? 'hwm-bc-neg' : 'hwm-bc-hit'));
     }
 
     if (!lines.length) return false;
@@ -823,7 +837,7 @@
     // Умения входят в ключ: база приходит с сервера и до её прихода список пуст
     const key = [own, targetIndex, attacker ? stackHp(attacker) : 0, stackHp(target),
       abilities.map(function (ability) { return ability.title; }).join(','),
-      (streak[targetIndex] || []).join(',')].join('|');
+      (streak[targetIndex] || []).join(','), isHitChanceExact(targetIndex)].join('|');
     if (key !== tipKey) {
       tipShown = renderTip(target, attacker, abilities);
       tipKey = key;
