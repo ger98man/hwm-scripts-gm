@@ -3,8 +3,8 @@
 // @author         ger98man
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
-// @description    На главной показывает, успеете ли взять умелку фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm
-// @version        2.1
+// @description    На главной показывает, успеете ли взять следующую умелку текущей фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm
+// @version        2.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
@@ -17,7 +17,6 @@
 // @include        http*://*lordswm.com/pl_warlog.php*
 // @grant          GM_deleteValue
 // @grant          GM_getValue
-// @grant          GM_listValues
 // @grant          GM_setValue
 // @grant          GM_addStyle
 // ==/UserScript==
@@ -30,21 +29,17 @@
 
   // Сколько умения нужно для каждого уровня умелки фракции (уровень 1 - первый элемент)
   const SKILL_THRESHOLDS = [20, 50, 90, 160, 280, 500, 900, 1600, 2900, 5300, 9600, 17300];
-  const DEFAULT_RATIO = 500;    // опыт / умка, пока нет боёв ГТ
   const STORED_BATTLES = 200;
   const AVERAGED_BATTLES = 50;
   const WARLOG_PAGES = 5;       // сколько страниц протокола просматривать при обновлении
   const BATTLE_TIMEOUT_MS = 30000;
   const DEFAULT_GT_TYPES = ['40']; // тип боя из комментария <!--40--> в строке протокола
 
-  const KEY_FACTION = 'selected_fract';
-  const KEY_LEVEL = 'selected_level';
-  const KEY_BATTLE_EXP = 'battle_exp';
-  const KEY_NICK = 'nick';
   const KEY_PARALLEL = 'load_parallel';
   const KEY_BATTLES = 'gt_battles';
   const KEY_GT_TYPES = 'gt_types';
   const SHARED_GT_TYPES = 'hwm_gt_types'; // для скрипта фильтра (общий localStorage страницы)
+  const LEGACY_KEYS = ['selected_fract', 'selected_level', 'battle_exp', 'nick']; // настройки версии 2.1
 
   function byId(id) {
     return document.getElementById(id);
@@ -52,10 +47,6 @@
 
   function pageParam(name) {
     return new URLSearchParams(location.search).get(name) || '';
-  }
-
-  function escapeAttr(text) {
-    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }
 
   function groupDigits(value) {
@@ -115,10 +106,8 @@
     GM_setValue(KEY_BATTLES, JSON.stringify(battles));
   }
 
-  // Ник из настроек, иначе самый частый из записанных боёв среди тех, что есть на странице
+  // Самый частый ник из записанных боёв среди тех, что есть на странице
   function detectNick(battles) {
-    const saved = GM_getValue(KEY_NICK, '');
-    if (saved) return saved;
     const pageText = document.body.textContent;
     const counts = new Map();
     battles.forEach(function (battle) {
@@ -218,15 +207,16 @@
     return factions;
   }
 
-  function chooseFaction(name, factions) {
-    return factions.find(function (faction) {
-      return name === '' ? faction.IsMain : faction.Name === name;
-    }) || factions[0];
+  // Играемая сейчас фракция; если её не видно на странице - основная, затем первая из списка
+  function currentFaction(factions) {
+    return factions.find(function (faction) { return faction.IsCurrent; }) ||
+      factions.find(function (faction) { return faction.IsMain; }) ||
+      factions[0];
   }
 
   function skillGoal(factions) {
-    const faction = chooseFaction(GM_getValue(KEY_FACTION, ''), factions);
-    const level = Math.max(parseInt(GM_getValue(KEY_LEVEL, 0), 10), faction.Level + 1);
+    const faction = currentFaction(factions);
+    const level = faction.Level + 1;
     const goal = { Name: faction.Name, CurrentLevel: faction.Level, Level: level, Need: -1, Progress: 0, IsMax: faction.Level === SKILL_THRESHOLDS.length };
     if (!goal.IsMax) {
       const target = SKILL_THRESHOLDS[level - 1];
@@ -243,53 +233,78 @@
     return '<span class="hwm_ea_k">' + text + '</span>';
   }
 
-  function renderMaxSkill(box, goal, head) {
-    box.className = 'hwm_ea_box';
-    box.innerHTML =
-      '<div class="hwm_ea_head">' + head + '<span class="hwm_ea_badge">max</span></div>' +
-      '<div class="hwm_ea_note">Максимальная умелка. Выберите другую фракцию в настройках</div>';
-    box.title =
-      'Вы апнули максимальную умелку фракции ' + goal.Name + '\n' +
-      'Выберите в настройках другую фракцию и нужный уровень умелки';
+  function headLine(goal, tail) {
+    return '<div class="hwm_ea_head"><span class="hwm_ea_title">' + goal.Name + ' ' + goal.CurrentLevel +
+      (goal.IsMax ? '' : ' → ' + goal.Level) + '</span><span class="hwm_ea_tail">' + tail + '</span></div>';
   }
 
-  function renderNoForecast(box, goal, head, bar, needRatio) {
-    box.className = 'hwm_ea_box';
-    box.innerHTML =
-      '<div class="hwm_ea_head">' + head + '<span class="hwm_ea_pct">' + Math.floor(goal.Progress * 100) + '%</span></div>' +
-      bar +
-      '<div>' + caption('Нужно умки') + ' <b>' + groupDigits(goal.Need.toFixed(1)) + '</b>' +
-      ' ' + caption('· нужно соотношение ≤') + ' <b>' + groupDigits(needRatio) + '</b></div>' +
-      '<div class="hwm_ea_note">Укажите опыт за бой в настройках или проведите бой ГТ</div>';
+  function badge(text) {
+    return '<span class="hwm_ea_badge">' + text + '</span>';
   }
 
-  function renderForecast(box, goal, head, bar, needRatio, expToLevel, stats, manualExp, battleExp, battleAbility) {
-    const battlesToSkill = Math.ceil(goal.Need / battleAbility);
-    const battlesToLevel = Math.ceil(expToLevel / battleExp);
-    const inTime = battlesToSkill <= battlesToLevel;
-    const ratio = Math.round(battleExp / battleAbility);
-    const expSource = manualExp > 0 ? 'Опыт из настроек' : 'Опыт по ' + stats.Count + ' боям ГТ';
-    const ratioSource = stats ? ', соотношение по ' + stats.Count + ' боям ГТ' : ', соотношение по умолчанию';
+  function percent(goal) {
+    return '<span class="hwm_ea_pct">' + Math.floor(goal.Progress * 100) + '%</span>';
+  }
 
-    box.className = 'hwm_ea_box ' + (inTime ? 'hwm_ea_ok' : 'hwm_ea_bad');
+  function progressBar(goal) {
+    return '<div class="hwm_ea_bar"><div style="width:' + (goal.Progress * 100).toFixed(1) + '%"></div></div>';
+  }
+
+  function renderMaxSkill(box, view) {
+    box.className = 'hwm_ea_box';
+    box.innerHTML = headLine(view.Goal, badge('max')) +
+      '<div class="hwm_ea_note">Максимальная умелка фракции</div>';
+    box.title = 'У фракции ' + view.Goal.Name + ' взята максимальная умелка';
+  }
+
+  function renderNoForecast(box, view) {
+    box.className = 'hwm_ea_box';
+    box.innerHTML = headLine(view.Goal, percent(view.Goal)) + progressBar(view.Goal) +
+      '<div>' + caption('Нужно умки на 1000 опыта') + ' <b>' + view.NeedCoef.toFixed(2) + '</b></div>' +
+      '<div class="hwm_ea_note">Боёв ГТ в базе нет: обновите умку в протоколе боёв</div>';
+    box.title = goalTitle(view) + '\n' +
+      'Боёв ГТ в базе нет, поэтому прогноза по боям нет';
+  }
+
+  function goalTitle(view) {
+    return 'Цель: умелка ' + view.Goal.Level + ' фракции ' + view.Goal.Name + '\n' +
+      'Осталось умки: ' + groupDigits(view.Goal.Need.toFixed(1)) +
+      ', опыта до уровня: ' + groupDigits(view.ExpToLevel) + '\n' +
+      'Нужно умки на 1000 опыта: ' + view.NeedCoef.toFixed(2);
+  }
+
+  // Успеваете, если ваш коэффициент не ниже нужного - это то же самое,
+  // что боёв до умелки не больше, чем боёв до апа уровня
+  function renderForecast(box, view) {
+    const stats = view.Stats;
+    const coef = stats.Ability / stats.Exp * 1000;
+    const isInTime = coef >= view.NeedCoef;
+    const battlesToSkill = Math.ceil(view.Goal.Need / stats.Ability);
+    const battlesToLevel = Math.ceil(view.ExpToLevel / stats.Exp);
+
+    box.className = 'hwm_ea_box ' + (isInTime ? 'hwm_ea_ok' : 'hwm_ea_bad');
     box.innerHTML =
-      '<div class="hwm_ea_head">' + head + '<span class="hwm_ea_badge">' + (inTime ? '✓ успеваете' : '✗ не успеваете') + '</span></div>' +
-      bar +
-      '<div>' + caption('До умелки') + ' <b>~' + battlesToSkill + '</b> боёв ' + caption('· до апа') + ' <b>~' + battlesToLevel + '</b> боёв</div>' +
-      '<div>' + caption(stats ? 'Соотношение ГТ' : 'Соотношение') + ' <b>' + groupDigits(ratio) + '</b>' +
-      ' ' + caption('· нужно ≤') + ' <b>' + groupDigits(needRatio) + '</b></div>' +
-      '<div>' + caption('Нужно умки') + ' <b>' + groupDigits(goal.Need.toFixed(1)) + '</b></div>' +
-      '<div class="hwm_ea_note">' + expSource + ratioSource + ': ' + groupDigits(Math.round(battleExp)) + ' опыта, ' +
-      battleAbility.toFixed(2) + ' умки за бой</div>';
-    box.title +=
-      '\n\n' + (manualExp > 0 ? 'Опыт за бой из настроек' : 'Опыт за бой - среднее по боям ГТ') + ', ' +
-      (stats ? 'соотношение - среднее по последним ' + stats.Count + ' боям ГТ (' + stats.Nick + ')'
-        : 'соотношение по умолчанию ' + DEFAULT_RATIO + ' (боёв ГТ ещё не записано)') + '\n' +
-      'Опыт за бой: ' + Math.round(battleExp) + ', умка за бой: ' + battleAbility.toFixed(2) +
-      ' (соотношение ' + ratio + ', нужно ≤ ' + needRatio + ')\n' +
-      'Боёв до умелки: ~' + battlesToSkill + '\n' +
-      'Боёв до апа уровня: ~' + battlesToLevel + '\n' +
-      (inTime ? 'Успеваете взять умелку до апа' : 'Уровень апнется раньше умелки');
+      headLine(view.Goal, percent(view.Goal) + badge(isInTime ? '✓ успеваете' : '✗ не успеваете')) +
+      progressBar(view.Goal) +
+      '<div>' + caption('До умелки') + ' <b>~' + groupDigits(battlesToSkill) + '</b> боёв ' +
+      caption('· до уровня') + ' <b>~' + groupDigits(battlesToLevel) + '</b> боёв</div>' +
+      '<div>' + caption('Умка на 1000 опыта') + ' <b>' + coef.toFixed(2) + '</b> ' +
+      caption('· нужно ≥') + ' <b>' + view.NeedCoef.toFixed(2) + '</b></div>';
+    box.title = goalTitle(view) + '\n' +
+      'По последним ' + stats.Count + ' боям ГТ (' + stats.Nick + '): ' +
+      groupDigits(Math.round(stats.Exp)) + ' опыта, ' + stats.Ability.toFixed(2) + ' умки за бой\n' +
+      'Ваша умка на 1000 опыта: ' + coef.toFixed(2) + '\n' +
+      'Боёв до умелки: ~' + battlesToSkill + ', боёв до апа уровня: ~' + battlesToLevel + '\n' +
+      (isInTime ? 'Успеваете взять умелку до апа' : 'Уровень апнется раньше умелки');
+  }
+
+  function findBox(after) {
+    const existing = byId('hwm_exp_abil_options');
+    if (existing) return existing;
+    const box = document.createElement('div');
+    box.id = 'hwm_exp_abil_options';
+    after.parentNode.insertBefore(box, after.nextSibling);
+    return box;
   }
 
   function renderHome() {
@@ -297,125 +312,18 @@
     const factions = readFactions();
     if (!exp || !factions.length) return;
 
-    let box = byId('hwm_exp_abil_options');
-    if (!box) {
-      box = document.createElement('div');
-      box.id = 'hwm_exp_abil_options';
-      exp.Element.parentNode.insertBefore(box, exp.Element.nextSibling);
-      box.addEventListener('click', openSettings);
-    }
-
     const goal = skillGoal(factions);
-    const head = '<span class="hwm_ea_title">' + goal.Name + ' ' + goal.CurrentLevel + (goal.IsMax ? '' : ' → ' + goal.Level) + '</span>';
+    const box = findBox(exp.Element);
+    const view = { Goal: goal, Stats: gtAverages(), ExpToLevel: exp.Exp, NeedCoef: goal.Need / exp.Exp * 1000 };
     if (goal.IsMax) {
-      renderMaxSkill(box, goal, head);
+      renderMaxSkill(box, view);
       return;
     }
-
-    const needRatio = Math.round(exp.Exp / goal.Need).toString();
-    const bar = '<div class="hwm_ea_bar"><div style="width:' + (goal.Progress * 100).toFixed(1) + '%"></div></div>';
-    box.title =
-      'Что б взять ' + goal.Level + 'ю умелку фракции ' + goal.Name + ' до апа уровня\n' +
-      'Вам нужно набрать ' + goal.Need + ' умения с соотношением ' + needRatio;
-
-    // Опыт за бой: из настроек, иначе среднее по ГТ. Умка за бой: опыт / соотношение по ГТ
-    const stats = gtAverages();
-    const manualExp = parseInt(GM_getValue(KEY_BATTLE_EXP, 0), 10) || 0;
-    const ratio = stats ? stats.Exp / stats.Ability : DEFAULT_RATIO;
-    const battleExp = manualExp > 0 ? manualExp : (stats ? stats.Exp : 0);
-    const battleAbility = battleExp / ratio;
-    if (battleExp > 0 && battleAbility > 0) {
-      renderForecast(box, goal, head, bar, needRatio, exp.Exp, stats, manualExp, battleExp, battleAbility);
-    } else {
-      renderNoForecast(box, goal, head, bar, needRatio);
+    if (!view.Stats) {
+      renderNoForecast(box, view);
+      return;
     }
-  }
-
-  // ------------------ главная: настройки
-
-  function closeSettings() {
-    byId('hwm_ea_overlay').remove();
-    byId('hwm_ea_dialog').remove();
-    renderHome();
-  }
-
-  // Записанные бои не трогаем: их долго собирать заново
-  function resetSettings() {
-    if (!confirm('Скинуть настройки? Записанные бои сохранятся.')) return;
-    GM_listValues().forEach(function (key) {
-      if (key !== KEY_BATTLES && key !== KEY_GT_TYPES) GM_deleteValue(key);
-    });
-    closeSettings();
-  }
-
-  function fillLevels(factions) {
-    const select = byId('hwm_ea_level');
-    const faction = chooseFaction(byId('hwm_ea_faction').value, factions);
-    const saved = parseInt(GM_getValue(KEY_LEVEL, 0), 10);
-    select.innerHTML = '';
-    for (let level = faction.Level + 1; level <= SKILL_THRESHOLDS.length; level++) {
-      select.add(new Option(level, level, false, level === saved));
-    }
-  }
-
-  function fillFactions(factions) {
-    const select = byId('hwm_ea_faction');
-    const chosen = chooseFaction(GM_getValue(KEY_FACTION, ''), factions);
-    factions.forEach(function (faction) {
-      const suffix = faction.IsMain ? ' (Основа)' : faction.IsCurrent ? ' (Играете сейчас)' : '';
-      select.add(new Option(faction.Name + suffix, faction.Name, false, faction === chosen));
-    });
-  }
-
-  function openSettings() {
-    if (byId('hwm_ea_dialog')) return;
-    const stats = gtAverages();
-    const factions = readFactions();
-    const manualExp = parseInt(GM_getValue(KEY_BATTLE_EXP, 0), 10) || 0;
-
-    const overlay = document.createElement('div');
-    overlay.id = 'hwm_ea_overlay';
-    overlay.addEventListener('click', closeSettings);
-    document.body.appendChild(overlay);
-
-    const dialog = document.createElement('div');
-    dialog.id = 'hwm_ea_dialog';
-    dialog.innerHTML =
-      '<div id="hwm_ea_close" title="Закрыть">x</div>' +
-      '<div class="hwm_ea_title">' + SCRIPT_TITLE + ' ' + SCRIPT_VERSION + '</div><hr/>' +
-      '<div><b>Какую умелку хотите взять до апа уровня:</b></div>' +
-      '<div><select id="hwm_ea_faction"></select> Фракция</div>' +
-      '<div><select id="hwm_ea_level"></select> Уровень умелки</div>' +
-      '<div><input type="number" min="0" id="hwm_ea_battle_exp" value="' + (manualExp > 0 ? manualExp : '') + '" placeholder="' +
-        (stats ? 'среднее ГТ: ' + Math.round(stats.Exp) : 'например 5000') + '"/> Опыт за бой (пусто = среднее по ГТ; умка = опыт / ' +
-        (stats ? 'соотношение ГТ ' + Math.round(stats.Exp / stats.Ability) : DEFAULT_RATIO + ', пока нет боёв ГТ') + ')</div>' +
-      '<div><input type="text" id="hwm_ea_nick" value="' + escapeAttr(GM_getValue(KEY_NICK, '')) + '" placeholder="определяется сам"/> Ваш ник в бою</div>' +
-      '<div class="hwm_ea_note">Записано боёв: ' + loadBattles().length + '. Считаем по последним ' + AVERAGED_BATTLES + ' боям ГТ.</div><hr/>' +
-      '<a href="#" id="hwm_ea_reset">Скинуть настройки</a>';
-    document.body.appendChild(dialog);
-
-    fillFactions(factions);
-    fillLevels(factions);
-
-    byId('hwm_ea_close').addEventListener('click', closeSettings);
-    byId('hwm_ea_reset').addEventListener('click', function (e) {
-      e.preventDefault();
-      resetSettings();
-    });
-    byId('hwm_ea_faction').addEventListener('change', function () {
-      GM_setValue(KEY_FACTION, this.value);
-      GM_deleteValue(KEY_LEVEL);
-      fillLevels(factions);
-    });
-    byId('hwm_ea_level').addEventListener('change', function () {
-      GM_setValue(KEY_LEVEL, this.value);
-    });
-    byId('hwm_ea_battle_exp').addEventListener('change', function () {
-      GM_setValue(KEY_BATTLE_EXP, parseInt(this.value, 10) || 0);
-    });
-    byId('hwm_ea_nick').addEventListener('change', function () {
-      GM_setValue(KEY_NICK, this.value.trim());
-    });
+    renderForecast(box, view);
   }
 
   // ------------------ протокол боёв
@@ -503,7 +411,7 @@
     const stats = gtAverages();
     status.textContent = stats
       ? 'В базе ' + stats.Count + ' боёв ГТ: ' + Math.round(stats.Exp) + ' опыта, ' + stats.Ability.toFixed(2) +
-        ' умки за бой, соотношение ' + Math.round(stats.Exp / stats.Ability)
+        ' умки за бой, умка на 1000 опыта ' + (stats.Ability / stats.Exp * 1000).toFixed(2)
       : 'Боёв ГТ в базе нет';
   }
 
@@ -607,14 +515,10 @@
 
   function addStyles() {
     GM_addStyle(
-      '#hwm_ea_overlay {position:fixed; left:0; top:0; width:100%; height:100%; z-index:1104; background:rgba(0,0,0,.7);}' +
-      '#hwm_ea_dialog {position:fixed; left:calc(50% - 300px); top:50px; z-index:1105; box-sizing:border-box; width:600px; max-height:calc(100% - 100px); overflow:auto; padding:15px; background:#F6F3EA; border-radius:5px;}' +
-      '#hwm_ea_dialog select, #hwm_ea_dialog input {width:220px; box-sizing:border-box;}' +
-      '#hwm_ea_close {float:right; width:15px; height:15px; border:1px solid #abc; text-align:center; cursor:pointer;}' +
-      '.hwm_ea_box {--ea:#a08a5c; margin:5px 0 0 8px; max-width:300px; padding:5px 8px; font-size:11px; line-height:1.45; color:#3b2a12; background:#fbf8f0; border:1px solid #d8cba9; border-left:3px solid var(--ea); border-radius:4px; cursor:pointer;}' +
-      '.hwm_ea_box:hover {background:#f3ecdb;}' +
+      '.hwm_ea_box {--ea:#a08a5c; margin:5px 0 0 8px; max-width:300px; padding:5px 8px; font-size:11px; line-height:1.45; color:#3b2a12; background:#fbf8f0; border:1px solid #d8cba9; border-left:3px solid var(--ea); border-radius:4px;}' +
       '.hwm_ea_ok {--ea:#3c8d2f;} .hwm_ea_bad {--ea:#c0392b;}' +
       '.hwm_ea_head {display:flex; justify-content:space-between; align-items:center; gap:8px;}' +
+      '.hwm_ea_tail {display:flex; align-items:center; gap:6px; white-space:nowrap;}' +
       '.hwm_ea_title {font-weight:bold; font-size:12px;}' +
       '.hwm_ea_badge {font-size:10px; font-weight:bold; color:#fff; background:var(--ea); border-radius:8px; padding:0 6px; white-space:nowrap;}' +
       '.hwm_ea_pct {font-size:10px; color:#696156;}' +
@@ -626,6 +530,13 @@
       '.hwm_ea_note {font-size:9px; color:#8a806f; margin-top:1px;}'
     );
   }
+
+  // Настройки убраны: фракция и уровень берутся со страницы, опыт - из боёв ГТ
+  function dropLegacySettings() {
+    LEGACY_KEYS.forEach(function (key) { GM_deleteValue(key); });
+  }
+
+  dropLegacySettings();
 
   if (location.pathname.indexOf('/war') === 0) {
     watchBattle();
