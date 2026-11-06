@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
 // @description    Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице.
-// @version        1.2
+// @version        1.3
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js
@@ -219,14 +219,12 @@ function WarlogProcess()
 
   var LGTTypes = BATTLE_GROUPS[0].Types.concat(LoadGTTypes());
 
-  // Винрейт по боям ГТ среди показанных строк
+  // Винрейт по показанным строкам - зависит от выбранного фильтра
   function ShowWinrate()
   {
     var LWins = 0, LTotal = 0;
     for (var i = 0; i < LShown.length; i++)
     {
-      if (BattleGroupOf(LShown[i].Type, LGTTypes) != 'gt')
-        continue;
       var LRes = RowResult(LShown[i], LPlayerId);
       if (LRes < 0)
         continue;
@@ -234,7 +232,7 @@ function WarlogProcess()
       LTotal++;
     }
     LWinrate.innerHTML = LTotal == 0 ? '' :
-      '<b>Винрейт ГТ на странице:</b> ' + LWins + ' побед из ' + LTotal + ' (<b>' +
+      '<b>Винрейт на странице (' + LSelect.options[LSelect.selectedIndex].text + '):</b> ' + LWins + ' побед из ' + LTotal + ' (<b>' +
       Math.round(LWins / LTotal * 100) + '%</b>), поражений ' + (LTotal - LWins);
   }
 
@@ -245,7 +243,7 @@ function WarlogProcess()
       LHtml += '<option value="' + BATTLE_GROUPS[i].Key + '">' + BATTLE_GROUPS[i].Name + '</option>';
     LHtml += '<option value="other">Прочее</option>';
     LSelect.innerHTML = LHtml;
-    LSelect.value = LoadSetting('warlog_filter', 'gt');
+    LSelect.value = LoadSetting('warlog_filter', '');
     if (LSelect.selectedIndex < 0)
       LSelect.value = '';
   }
