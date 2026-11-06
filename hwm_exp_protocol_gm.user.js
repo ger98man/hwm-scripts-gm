@@ -3,8 +3,8 @@
 // @author         ger98man
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
-// @description    На главной показывает, успеете ли взять следующую умелку текущей фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm
-// @version        2.3
+// @description    На главной показывает, успеете ли взять следующую умелку текущей фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв - всех или только ГТ. Фильтр протокола - hwm_warlog_filter_gm
+// @version        2.4
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
@@ -38,6 +38,7 @@
 
   const KEY_BATTLES = 'gt_battles';
   const KEY_GT_TYPES = 'gt_types';
+  const KEY_ONLY_GT = 'only_gt'; // выбор типа боёв в панели протокола: '1' - только ГТ, '0' - все
   const SHARED_GT_TYPES = 'hwm_gt_types'; // для скрипта фильтра (общий localStorage страницы)
   const LEGACY_KEYS = ['selected_fract', 'selected_level', 'battle_exp', 'nick']; // настройки версии 2.1
 
@@ -126,7 +127,8 @@
     return best;
   }
 
-  function gtAverages() {
+  // onlyGt - считать только по боям, где давали очки ГТ
+  function averages(onlyGt) {
     const battles = loadBattles();
     const nick = detectNick(battles);
     if (!nick) return null;
@@ -134,7 +136,7 @@
     let ability = 0;
     let count = 0;
     for (let i = battles.length - 1; i >= 0 && count < AVERAGED_BATTLES; i--) {
-      if (!isGtBattle(battles[i])) continue;
+      if (onlyGt && !isGtBattle(battles[i])) continue;
       const own = battles[i].Lines.find(function (line) { return line.Nick == nick; });
       if (!own) continue;
       exp += own.Exp;
@@ -314,7 +316,7 @@
 
     const goal = skillGoal(factions);
     const box = findBox(exp.Element);
-    const view = { Goal: goal, Stats: gtAverages(), ExpToLevel: exp.Exp, NeedCoef: goal.Need / exp.Exp * 1000 };
+    const view = { Goal: goal, Stats: averages(true), ExpToLevel: exp.Exp, NeedCoef: goal.Need / exp.Exp * 1000 };
     if (goal.IsMax) {
       renderMaxSkill(box, view);
       return;
@@ -407,12 +409,13 @@
     request.send(null);
   }
 
-  function showGtStats(status) {
-    const stats = gtAverages();
+  function showStats(status, onlyGt) {
+    const stats = averages(onlyGt);
+    const kind = onlyGt ? ' боёв ГТ' : ' боёв';
     status.textContent = stats
-      ? 'В базе ' + stats.Count + ' боёв ГТ: ' + Math.round(stats.Exp) + ' опыта, ' + stats.Ability.toFixed(2) +
+      ? 'В базе ' + stats.Count + kind + ': ' + Math.round(stats.Exp) + ' опыта, ' + stats.Ability.toFixed(2) +
         ' умки за бой, умка на 1000 опыта ' + (stats.Ability / stats.Exp * 1000).toFixed(2)
-      : 'Боёв ГТ в базе нет';
+      : (onlyGt ? 'Боёв ГТ в базе нет' : 'Боёв в базе нет');
   }
 
   // Читает несколько страниц протокола и догружает итоги боёв, которых нет в базе
@@ -431,7 +434,7 @@
 
     function finish() {
       learnGtTypes(seenRows);
-      showGtStats(status);
+      showStats(status, onlyGt);
       status.textContent = 'Загружено боёв: ' + loaded + ' из ' + queue.length + '. ' + status.textContent;
       button.disabled = false;
     }
@@ -490,16 +493,27 @@
     const panel = document.createElement('div');
     panel.className = 'hwm_ea_panel';
     panel.innerHTML =
+      '<b>Бои:</b> <select id="hwm_ea_type"><option value="gt">ГТ</option><option value="all">Все</option></select>' +
       '<button type="button" id="hwm_ea_reload">Обновить среднюю умку на 1000 опыта за последние ' + AVERAGED_BATTLES + ' боёв</button> ' +
       '<span id="hwm_ea_status" class="hwm_ea_k"></span>';
     box.parentNode.insertBefore(panel, box);
 
     const status = byId('hwm_ea_status');
     const button = byId('hwm_ea_reload');
+    const select = byId('hwm_ea_type');
 
-    showGtStats(status);
+    function isOnlyGt() {
+      return select.value === 'gt';
+    }
+
+    select.value = GM_getValue(KEY_ONLY_GT, '1') === '0' ? 'all' : 'gt';
+    showStats(status, isOnlyGt());
+    select.addEventListener('change', function () {
+      GM_setValue(KEY_ONLY_GT, isOnlyGt() ? '1' : '0');
+      showStats(status, isOnlyGt());
+    });
     button.addEventListener('click', function () {
-      reloadBattles(status, button, true, LOAD_PARALLEL);
+      reloadBattles(status, button, isOnlyGt(), LOAD_PARALLEL);
     });
   }
 
