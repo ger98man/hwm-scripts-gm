@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
 // @description    На главной показывает, успеете ли взять следующую умелку текущей фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв - всех или только ГТ. Фильтр протокола - hwm_warlog_filter_gm
-// @version        2.4
+// @version        2.5
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
@@ -435,7 +435,9 @@
     function finish() {
       learnGtTypes(seenRows);
       showStats(status, onlyGt);
-      status.textContent = 'Загружено боёв: ' + loaded + ' из ' + queue.length + '. ' + status.textContent;
+      // Пустая очередь - обычное дело: итоги всех боёв с просмотренных страниц уже в базе
+      const prefix = queue.length ? 'Загружено боёв: ' + loaded + ' из ' + queue.length + '. ' : 'Новых боёв нет. ';
+      status.textContent = prefix + status.textContent;
       button.disabled = false;
     }
 
