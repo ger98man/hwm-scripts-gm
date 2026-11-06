@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_market_price
 // @description    Рынок: за какую цену выставить арт с вашей прочностью, чтобы он был выгоднее лотов на странице, с учётом стоимости ремонта, падения максимальной прочности и комиссии 1%
-// @version        0.1
+// @version        0.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_market_price_gm.user.js
@@ -134,17 +134,39 @@
   if (!table) return;
 
   const saved = loadSaved();
+  const style = document.createElement('style');
+  style.textContent =
+    '.mp_panel{margin:6px 0;padding:8px 10px;border:1px solid #b9a77a;border-radius:4px;background:#f7f1df;font-size:12px;text-align:left}' +
+    '.mp_title{font-weight:bold;margin-bottom:6px}' +
+    '.mp_inputs{display:flex;flex-wrap:nowrap;align-items:center;gap:14px;white-space:nowrap}' +
+    '.mp_inputs label{display:flex;align-items:center;gap:4px;color:#444}' +
+    '.mp_inputs input{padding:1px 3px;font-size:12px}' +
+    '.mp_note{color:#888;font-size:11px;margin-top:5px}' +
+    '.mp_table{width:100%;margin-top:8px;border-collapse:collapse;background:#fff;border:1px solid #d8cba5}' +
+    '.mp_table th{background:#e9dfc2;color:#333;font-weight:normal;padding:4px 8px;text-align:right;border-bottom:1px solid #d8cba5;cursor:help}' +
+    '.mp_table td{padding:4px 8px;text-align:right;border-bottom:1px solid #eee5cc;font-variant-numeric:tabular-nums}' +
+    '.mp_table th:first-child,.mp_table td:first-child{text-align:left}' +
+    '.mp_table td.mp_hint{text-align:left;color:#888;font-size:11px}' +
+    '.mp_table tr.mp_best td{background:#eef6e6}' +
+    '.mp_table tr.mp_mine td{background:#fbf6e6;border-top:2px solid #d8cba5}' +
+    '.mp_price{font-weight:bold}' +
+    '.mp_repair{margin-top:6px}' +
+    '.mp_good{color:#060;font-weight:bold}.mp_bad{color:#a00;font-weight:bold}.mp_warn{color:#a60;margin-top:6px}';
+  document.head.appendChild(style);
+
   const panel = document.createElement('div');
-  panel.style.cssText = 'margin:6px 0;padding:6px 8px;border:1px solid #b9a77a;background:#f7f1df;font-size:12px;text-align:left;';
+  panel.className = 'mp_panel';
   panel.innerHTML =
-    '<b>Цена для продажи</b> ' +
-    '&nbsp; Моя прочность: <input id="mp_cur" type="number" min="1" style="width:50px">' +
-    ' / <input id="mp_max" type="number" min="1" style="width:50px">' +
-    ' &nbsp; Ремонт: <input id="mp_rep" type="number" min="0" style="width:70px"> зол.' +
-    ' &nbsp; Шаг: <input id="mp_step" type="number" min="0" style="width:50px"> зол.' +
-    ' &nbsp; Моя цена: <input id="mp_my" type="number" min="1" style="width:80px" placeholder="проверить">' +
-    '<div id="mp_note" style="color:#777;margin-top:3px"></div>' +
-    '<div id="mp_out" style="margin-top:4px"></div>';
+    '<div class="mp_title">Цена для продажи</div>' +
+    '<div class="mp_inputs">' +
+    '<label title="Текущая / максимальная прочность вашего арта">Прочность <input id="mp_cur" type="number" min="1" style="width:46px">' +
+    ' / <input id="mp_max" type="number" min="1" style="width:46px"></label>' +
+    '<label title="Стоимость одного ремонта">Ремонт <input id="mp_rep" type="number" min="0" style="width:66px"> зол.</label>' +
+    '<label title="На сколько золотых подрезать цену конкурента">Шаг <input id="mp_step" type="number" min="0" style="width:46px"> зол.</label>' +
+    '<label title="Проверить свою цену: какое место займёт лот">Моя цена <input id="mp_my" type="number" min="1" style="width:76px"></label>' +
+    '</div>' +
+    '<div id="mp_out"></div>' +
+    '<div id="mp_note" class="mp_note"></div>';
   table.parentNode.insertBefore(panel, table);
 
   const el = function (id) { return panel.querySelector('#' + id); };
@@ -182,11 +204,19 @@
     cell.textContent = 'бой: ' + fmtBattle(plan.perBattle) + (plan.repairs ? ' (ремонтов: ' + plan.repairs + ')' : '');
   }
 
-  function recommendation(label, target, input, extra) {
-    const price = priceForTarget(target, input.cur, input.max, input.rep);
+  function place(market, perBattle) {
+    return market.filter(function (item) { return item.plan.perBattle < perBattle; }).length + 1;
+  }
+
+  function resultRow(className, label, price, input, market, hint) {
     const plan = bestPlan(price, input.cur, input.max, input.rep);
-    return '<tr><td>' + label + '</td><td><b>' + groupDigits(price) + '</b></td><td>' + fmtBattle(plan.perBattle) +
-      '</td><td>' + groupDigits(net(price)) + '</td><td>' + (extra || '') + '</td></tr>';
+    return '<tr class="' + className + '"><td>' + label + '</td>' +
+      '<td class="mp_price">' + groupDigits(price) + '</td>' +
+      '<td>' + groupDigits(net(price)) + '</td>' +
+      '<td>' + fmtBattle(plan.perBattle) + '</td>' +
+      '<td>' + plan.repairs + '</td>' +
+      '<td>' + place(market, plan.perBattle) + ' из ' + (market.length + 1) + '</td>' +
+      '<td class="mp_hint">' + hint + '</td></tr>';
   }
 
   function render() {
@@ -219,32 +249,34 @@
     const second = market[1] ? market[1].plan.perBattle : best;
     const median = market[Math.floor((market.length - 1) / 2)].plan.perBattle;
 
-    let html = '<table cellpadding="2" style="border-collapse:collapse">' +
-      '<tr style="color:#777"><td>Вариант</td><td>Цена</td><td>Бой</td><td>На руки</td><td></td></tr>';
-    html += recommendation('Быстро: дешевле всех', best - stepPerBattle, input, 'первым в списке по цене боя');
-    if (market.length > 1) html += recommendation('Вторым', second - stepPerBattle, input, 'между 1-м и 2-м лотом');
-    if (market.length > 2) html += recommendation('По медиане', median, input, 'ждать покупателя дольше');
+    const target = function (perBattle) { return priceForTarget(perBattle, input.cur, input.max, input.rep); };
+    let html = '<table class="mp_table"><tr>' +
+      '<th>Вариант</th>' +
+      '<th title="Цена, которую ставить в лот">Цена</th>' +
+      '<th title="Что останется после комиссии рынка 1%">На руки</th>' +
+      '<th title="Средняя цена боя для покупателя с учётом выгодных ремонтов">Цена боя</th>' +
+      '<th title="Сколько раз покупателю выгодно чинить арт">Ремонтов</th>' +
+      '<th title="Место среди лотов «Купить сразу» по цене боя">Место</th>' +
+      '<th></th></tr>';
+    html += resultRow('mp_best', 'Быстро', target(best - stepPerBattle), input, market, 'дешевле всех по цене боя');
+    if (market.length > 1) html += resultRow('', 'Вторым', target(second - stepPerBattle), input, market, 'между 1-м и 2-м лотом');
+    if (market.length > 2) html += resultRow('', 'По медиане', target(median), input, market, 'дороже, продаётся дольше');
+    if (input.my > 0) html += resultRow('mp_mine', 'Моя цена', input.my, input, market, 'введена вручную');
     html += '</table>';
 
     // Чинить ли перед продажей: после ремонта арт станет (max-1)/(max-1)
     if (input.rep > 0 && input.max - 1 > input.cur) {
-      const asIs = priceForTarget(best - stepPerBattle, input.cur, input.max, input.rep);
+      const asIs = target(best - stepPerBattle);
       const fixed = priceForTarget(best - stepPerBattle, input.max - 1, input.max - 1, input.rep);
       const gain = net(fixed) - input.rep - net(asIs);
-      html += '<div style="margin-top:4px">Починить перед продажей: цена ' + groupDigits(fixed) + ' (' +
-        (input.max - 1) + '/' + (input.max - 1) + '), с учётом ремонта и комиссии ' +
-        (gain > 0 ? '<b style="color:#060">выгоднее на ' + groupDigits(gain) + '</b>'
-                  : '<b style="color:#a00">невыгодно (' + groupDigits(gain) + ')</b>') + '.</div>';
+      html += '<div class="mp_repair">Починить перед продажей до ' + (input.max - 1) + '/' + (input.max - 1) +
+        ' и выставить за ' + groupDigits(fixed) + ': ' +
+        (gain > 0 ? '<span class="mp_good">выгоднее на ' + groupDigits(gain) + '</span>'
+                  : '<span class="mp_bad">невыгодно, теряете ' + groupDigits(-gain) + '</span>') +
+        ' (с учётом ремонта и комиссии).</div>';
     }
 
-    if (input.my > 0) {
-      const plan = bestPlan(input.my, input.cur, input.max, input.rep);
-      const place = market.filter(function (item) { return item.plan.perBattle < plan.perBattle; }).length + 1;
-      html += '<div style="margin-top:4px">Моя цена ' + groupDigits(input.my) + ' (на руки ' + groupDigits(net(input.my)) + '): бой ' + fmtBattle(plan.perBattle) +
-        (plan.repairs ? ' при ' + plan.repairs + ' ремонтах' : '') + ', место ' + place + ' из ' + (market.length + 1) + '.</div>';
-    }
-
-    if (!input.rep) html += '<div style="color:#a60;margin-top:4px">Стоимость ремонта не задана: расчёт без ремонтов.</div>';
+    if (!input.rep) html += '<div class="mp_warn">Стоимость ремонта не задана: расчёт без ремонтов.</div>';
     out.innerHTML = html;
   }
 
