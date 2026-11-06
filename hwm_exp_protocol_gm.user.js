@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_bmxcs_personal
 // @description    На главной показывает, успеете ли взять следующую умелку текущей фракции до апа уровня, с прогнозом по боям ГТ. В протоколе загружает итоги боёв ГТ. Фильтр протокола - hwm_warlog_filter_gm
-// @version        2.2
+// @version        2.3
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_exp_protocol_gm.user.js
@@ -31,11 +31,11 @@
   const SKILL_THRESHOLDS = [20, 50, 90, 160, 280, 500, 900, 1600, 2900, 5300, 9600, 17300];
   const STORED_BATTLES = 200;
   const AVERAGED_BATTLES = 50;
+  const LOAD_PARALLEL = 4;      // сколько боёв загружать одновременно
   const WARLOG_PAGES = 5;       // сколько страниц протокола просматривать при обновлении
   const BATTLE_TIMEOUT_MS = 30000;
   const DEFAULT_GT_TYPES = ['40']; // тип боя из комментария <!--40--> в строке протокола
 
-  const KEY_PARALLEL = 'load_parallel';
   const KEY_BATTLES = 'gt_battles';
   const KEY_GT_TYPES = 'gt_types';
   const SHARED_GT_TYPES = 'hwm_gt_types'; // для скрипта фильтра (общий localStorage страницы)
@@ -490,24 +490,16 @@
     const panel = document.createElement('div');
     panel.className = 'hwm_ea_panel';
     panel.innerHTML =
-      '<button type="button" id="hwm_ea_reload">Обновить умку по боям ГТ</button> ' +
-      'бои: <select id="hwm_ea_scope"><option value="gt">ГТ</option><option value="all">все</option></select> ' +
-      'потоков: <select id="hwm_ea_parallel"><option>1</option><option>2</option><option>4</option><option>6</option><option>8</option></select> ' +
+      '<button type="button" id="hwm_ea_reload">Обновить среднюю умку на 1000 опыта за последние ' + AVERAGED_BATTLES + ' боёв</button> ' +
       '<span id="hwm_ea_status" class="hwm_ea_k"></span>';
     box.parentNode.insertBefore(panel, box);
 
     const status = byId('hwm_ea_status');
     const button = byId('hwm_ea_reload');
-    const parallel = byId('hwm_ea_parallel');
-    parallel.value = GM_getValue(KEY_PARALLEL, '4');
-    if (parallel.selectedIndex < 0) parallel.value = '4';
 
     showGtStats(status);
-    parallel.addEventListener('change', function () {
-      GM_setValue(KEY_PARALLEL, parallel.value);
-    });
     button.addEventListener('click', function () {
-      reloadBattles(status, button, byId('hwm_ea_scope').value !== 'all', parseInt(parallel.value, 10) || 1);
+      reloadBattles(status, button, true, LOAD_PARALLEL);
     });
   }
 
