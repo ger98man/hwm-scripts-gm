@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_market_price
 // @description    Рынок: за какую цену выставить арт с вашей прочностью, чтобы он был выгоднее лотов на странице, с учётом стоимости ремонта, падения максимальной прочности и комиссии 1%
-// @version        0.2
+// @version        0.3
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_market_price_gm.user.js
@@ -32,6 +32,7 @@
   if (!artType) return;
 
   const KEY = 'price_' + artType;
+  const SAVE_VERSION = 2; // старые настройки могли сохранить неверно разобранную стоимость ремонта
   const MAX_REPAIRS = 200;
   const FEE = 0.01; // комиссия рынка с продавца
 
@@ -54,7 +55,12 @@
   }
 
   function loadSaved() {
-    try { return JSON.parse(GM_getValue(KEY, '{}')) || {}; } catch (e) { return {}; }
+    try {
+      const data = JSON.parse(GM_getValue(KEY, '{}')) || {};
+      // стоимость ремонта из прошлых версий недостоверна: запросим её заново
+      if (data.v !== SAVE_VERSION) data.rep = null;
+      return data;
+    } catch (e) { return {}; }
   }
 
   function save(data) {
@@ -121,10 +127,22 @@
 
   // ------------------ стоимость ремонта со страницы арта
 
+  function firstNumber(node) {
+    if (!node) return 0;
+    const found = /\d[\d,.\s]*\d|\d/.exec(node.textContent);
+    return found ? num(found[0]) : 0;
+  }
+
+  // Число берётся из блока рядом с подписью, а не поиском по тексту всей страницы: в тексте
+  // `art_info.php` цена стоит вплотную к подвалу - «Стоимость ремонта:12,8002007-2026»,
+  // и регулярка вместо 12,800 давала 6 (хвост года), проверено на живой странице `arm_handgun2`.
   function findRepairCost(html) {
-    const text = new DOMParser().parseFromString(html, 'text/html').body.textContent.replace(/\s+/g, ' ');
-    const found = /ремонт\S*[^\d]{0,40}?(\d[\d,. ]*\d|\d)/i.exec(text);
-    return found ? num(found[1]) : 0;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const label = Array.prototype.find.call(doc.querySelectorAll('b'), function (b) {
+      return /Стоимость\s+ремонта/i.test(b.textContent);
+    });
+    if (!label) return 0;
+    return firstNumber(label) || firstNumber(label.nextElementSibling);
   }
 
   // ------------------ панель
@@ -221,7 +239,7 @@
 
   function render() {
     const input = readInputs();
-    save({ cur: input.cur, max: input.max, rep: input.rep, step: input.step });
+    save({ v: SAVE_VERSION, cur: input.cur, max: input.max, rep: input.rep, step: input.step });
     el('mp_note').textContent = notes.join(' ');
     const out = el('mp_out');
 
