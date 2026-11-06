@@ -3,8 +3,8 @@
 // @author         ger98man
 // @license        MIT
 // @namespace      hwm_combat_info
-// @description    В бою под окном информации об отряде показывает здоровье и численность, а под окном героя — здоровье армий обеих сторон
-// @version        1.1
+// @description    В бою под окном информации об отряде показывает здоровье и численность, а под окном героя — здоровье его армии
+// @version        1.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_combat_info_gm.user.js
@@ -29,9 +29,9 @@
   const INFO_WINDOWS = ['win_InfoCreature', 'win_InfoCreatureEffect', 'win_InfoHero', 'win_InfoHero2'];
 
   const TEXT = location.hostname.indexOf('heroeswm') > -1 ? {
-    size: 'Численность', health: 'Здоровье', atb: 'Позиция АТБ', armies: 'Армии',
+    size: 'Численность', health: 'Здоровье', atb: 'Позиция АТБ', army: 'Армия',
   } : {
-    size: 'Stack size', health: 'Health', atb: 'ATB position', armies: 'Armies',
+    size: 'Stack size', health: 'Health', atb: 'ATB position', army: 'Army',
   };
 
   const style = document.createElement('style');
@@ -83,51 +83,37 @@
     return formatNumber(health.now) + '/' + formatNumber(health.max) + ' (' + percent + '%)';
   }
 
-  // Стороны боя по владельцам: у одной стороны может быть несколько героев
-  function sidesByOwner() {
+  // Армия героя - отряды того же владельца. owner сервер шлёт на каждый объект боя
+  // (show_polep.js: this.obj[i]['owner']=data.substr(4,6)-0), герой владельца лежит
+  // в heroes[owner]. Призванных прямо в бою считаем наравне с остальными и в текущем
+  // здоровье, и в максимуме: на поле это такое же здоровье, которое придётся пробивать.
+  // Максимум всей армии неизвестен, если он неизвестен хоть у одного отряда
+  function armyHealth(hero) {
     const units = allUnits();
-    const sides = {};
-    Object.keys(w.heroes || {}).forEach(function (owner) {
-      const hero = units[w.heroes[owner]];
-      if (hero && !hero.rock) sides[owner] = hero.side;
-    });
-    return sides;
-  }
-
-  // Здоровье живых отрядов по сторонам. Призванных прямо в бою считаем наравне с остальными:
-  // на поле это такое же здоровье, которое придётся пробивать
-  function healthBySide() {
-    const units = allUnits();
-    const sides = sidesByOwner();
-    const totals = {};
-    Object.keys(units).forEach(function (key) {
+    return Object.keys(units).reduce(function (total, key) {
       const unit = units[key];
-      if (!unit || unit.hero || unit.rock) return;
-      const side = sides[unit.owner];
-      if (side === undefined) return;
-      totals[side] = (totals[side] || 0) + stackHealth(unit).now;
-    });
-    return totals;
+      if (!unit || unit.hero || unit.rock || unit.owner !== hero.owner) return total;
+      const health = stackHealth(unit);
+      return {
+        stacks: total.stacks + 1,
+        now: total.now + health.now,
+        max: total.max === null || health.max === null ? null : total.max + health.max,
+      };
+    }, { stacks: 0, now: 0, max: 0 });
   }
 
-  // Сторона выбранного героя первой, остальные стороны вместе второй; процент - доля
-  // выбранной стороны в здоровье, оставшемся на поле. Если здоровья нет совсем, то и
-  // показывать нечего: null
-  function armiesLine(hero) {
-    const totals = healthBySide();
-    const own = totals[hero.side] || 0;
-    const rest = Object.keys(totals).reduce(function (sum, side) {
-      return Number(side) === hero.side ? sum : sum + totals[side];
-    }, 0);
-    if (own + rest === 0) return null;
-    const share = Math.round(own / (own + rest) * 100);
-    return [TEXT.armies, formatNumber(own) + ' / ' + formatNumber(rest) + ' (' + share + '%)'];
+  // Погибшую армию показываем как 0 от начального здоровья. Если отрядов нет совсем
+  // (декоративные объекты поля), то и показывать нечего: null
+  function armyLine(hero) {
+    const health = armyHealth(hero);
+    if (health.stacks === 0) return null;
+    return [TEXT.army, formatHealth(health)];
   }
 
   function describe(unit) {
     if (unit.hero) {
-      const armies = armiesLine(unit);
-      return armies === null ? [] : [armies];
+      const army = armyLine(unit);
+      return army === null ? [] : [army];
     }
     const lines = [
       [TEXT.size, unit.nownumber + '/' + unit.maxnumber],
