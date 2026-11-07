@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_no_retaliation
 // @description    Во время боя помечает отряды, у которых снята отдача (ответ уже потрачен до их следующего хода)
-// @version        0.3
+// @version        0.4
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_no_retaliation_gm.user.js
@@ -33,16 +33,19 @@
 
   const w = unsafeWindow;
 
-  // Сдвиг метки вниз от ног отряда (в экранных пикселях), чтобы не закрывать численность
-  const OFFSET_Y = 18;
+  // Зазор между плашкой численности и крестиком (в пикселях canvas)
+  const GAP_X = 2;
+  // Если плашку не удалось найти - крестик под ногами отряда (экранные пиксели)
+  const FALLBACK_Y = 10;
   // Сколько раз за бой можно заново повесить хук, если игра или другой скрипт его заменили
   const MAX_HOOKS = 8;
 
   const style = document.createElement('style');
   style.textContent =
-    '.hwm-noret{position:fixed;z-index:50;pointer-events:none;transform:translateX(-50%);' +
-    'padding:0 4px;border-radius:4px;background:rgba(60,0,0,.8);color:#ff8a7a;' +
-    'font:bold 11px Verdana,Arial,sans-serif;white-space:nowrap;text-shadow:0 0 2px #000;}';
+    '.hwm-noret{position:fixed;z-index:50;pointer-events:none;transform:translateY(-50%);' +
+    'box-sizing:border-box;display:flex;align-items:center;justify-content:center;' +
+    'border-radius:3px;background:rgba(40,0,0,.75);border:1px solid #ff3b30;color:#ff3b30;' +
+    'font-family:Arial,sans-serif;font-weight:bold;line-height:1;text-shadow:0 0 2px #000;}';
   document.head.appendChild(style);
 
   const labels = {};
@@ -160,11 +163,34 @@
     if (!labels[key]) {
       const el = document.createElement('div');
       el.className = 'hwm-noret';
-      el.textContent = 'без отдачи';
+      el.textContent = '✖';
+      el.title = 'без отдачи';
       document.body.appendChild(el);
       labels[key] = el;
     }
     return labels[key];
+  }
+
+  // Плашка численности: игра ставит её в (scr_x + number.tx, scr_y), в пикселях canvas
+  // (set_number / set_number_outside в show_polep.js). Возвращает её прямоугольник или null.
+  function badgeBox(cre) {
+    const num = cre.number;
+    if (!num || typeof num.tx !== 'number') return null;
+    try {
+      if (typeof w.get_visible === 'function' && !w.get_visible(num)) return null;
+      let width = 0, height = 0;
+      if (cre.number_rect && typeof w.get_width === 'function') {
+        width = w.get_width(cre.number_rect);
+        height = w.get_height(cre.number_rect);
+      }
+      if (!(width > 0) && cre.ntext && typeof w.get_width === 'function') {
+        const pad = Math.max(2, 3 * (cre.scaling || 1));
+        width = w.get_width(cre.ntext) + pad * 2 + 2;
+        height = w.get_height(cre.ntext) + 2;
+      }
+      if (!(width > 0) || !(height > 0)) return null;
+      return { x: cre.scr_x + num.tx, y: cre.scr_y, w: width, h: height };
+    } catch (e) { return null; }
   }
 
   function update() {
@@ -191,8 +217,17 @@
         const key = String(index);
         used[key] = true;
         const el = getLabel(key);
-        el.style.left = (rect.left + cre.scr_x * kx) + 'px';
-        el.style.top = (rect.top + cre.scr_y * ky + OFFSET_Y) + 'px';
+        const box = badgeBox(cre);
+        const size = Math.round(box ? box.h * ky : 16);
+        el.style.width = el.style.height = size + 'px';
+        el.style.fontSize = Math.round(size * 0.7) + 'px';
+        if (box) {
+          el.style.left = (rect.left + (box.x + box.w + GAP_X) * kx) + 'px';
+          el.style.top = (rect.top + (box.y + box.h / 2) * ky) + 'px';
+        } else {
+          el.style.left = (rect.left + cre.scr_x * kx - size / 2) + 'px';
+          el.style.top = (rect.top + cre.scr_y * ky + FALLBACK_Y) + 'px';
+        }
         el.style.display = rect.width > 0 ? 'block' : 'none';
       });
     }
