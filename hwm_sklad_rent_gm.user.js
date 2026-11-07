@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_sklad_rent
 // @description    Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта)
-// @version        0.1
+// @version        0.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js
@@ -60,6 +60,15 @@
 
       const text = title.textContent.trim();
       const name = (/^'([^']+)'/.exec(text) || [])[1] || text;
+      // Сколько боёв реально можно взять: максимум в списке, но не больше текущей прочности
+      let maxBattles = 0;
+      Array.prototype.forEach.call(select.options, function (o) {
+        const n = parseInt(o.value || o.textContent, 10);
+        if (n > maxBattles) maxBattles = n;
+      });
+      if (!maxBattles) maxBattles = select.options.length;
+      const dur = /\[(\d+)\/\d+\]\s*$/.exec(text);
+      if (dur) maxBattles = Math.min(maxBattles, parseInt(dur[1], 10));
       result.push({
         key: key,
         code: link.getAttribute('name'),
@@ -67,7 +76,7 @@
         title: text,
         crafted: /\[[A-Z0-9]+\]\s*$/.test(name),
         price: parseInt(priceCell.textContent.replace(/\D/g, ''), 10),
-        maxBattles: select.options.length,
+        maxBattles: maxBattles,
         params: collectParams(form, row),
       });
     });
@@ -105,15 +114,20 @@
     return rows;
   }
 
-  // Для каждого артефакта набора - самый дешёвый некрафтовый того же вида
-  function pickItems(set, rows) {
+  // Для каждого артефакта набора - самый дешёвый некрафтовый того же вида,
+  // которого хватит на нужное число боёв; если таких нет - с наибольшим запасом боёв
+  function pickItems(set, rows, battles) {
     const used = {};
     const picked = [];
     const missing = [];
     set.forEach(function (code) {
       const candidates = rows
         .filter(function (r) { return r.code === code && !r.crafted && !used[r.key]; })
-        .sort(function (a, b) { return a.price - b.price; });
+        .sort(function (a, b) {
+          const ea = Math.min(a.maxBattles, battles);
+          const eb = Math.min(b.maxBattles, battles);
+          return (eb - ea) || (a.price - b.price);
+        });
       if (candidates.length) {
         used[candidates[0].key] = true;
         picked.push(candidates[0]);
@@ -167,7 +181,7 @@
       render('Ошибка загрузки склада: ' + e);
       return;
     }
-    const plan = pickItems(set, rows);
+    const plan = pickItems(set, rows, battles);
     if (!plan.picked.length) {
       render('Свободных вещей из набора нет' + (plan.missing.length ? ': ' + plan.missing.join(', ') : ''));
       return;
@@ -175,7 +189,8 @@
 
     const total = plan.picked.reduce(function (s, r) { return s + r.price * Math.min(battles, r.maxBattles); }, 0);
     const text = plan.picked.map(function (r) {
-      return '- ' + r.title + ': ' + r.price + ' x ' + Math.min(battles, r.maxBattles);
+      return '- ' + r.title + ': ' + r.price + ' x ' + Math.min(battles, r.maxBattles) +
+        (r.maxBattles < battles ? '  (меньше ' + battles + ': больше нет)' : '');
     }).join('\n');
     const ok = confirm('Арендовать ' + plan.picked.length + ' шт. на ' + battles + ' боёв?\n\n' + text +
       '\n\nИтого примерно: ' + total + ' золота (+1% комиссия)' +

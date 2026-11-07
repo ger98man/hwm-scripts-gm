@@ -15,7 +15,7 @@
 | `hwm_market_price_gm` | 0.3 | Рынок: за какую цену выставить арт с вашей прочностью, чтобы он был выгоднее текущих лотов, с учётом стоимости ремонта и падения максимальной прочности после ремонта и комиссии 1% | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_market_price_gm.user.js) |
 | `hwm_no_retaliation_gm` | 0.3 | Во время боя помечает отряды, у которых снята отдача (ответ уже потрачен до их следующего хода) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_no_retaliation_gm.user.js) |
 | `hwm_res_value_gm` | 0.1 | Примерная стоимость ресурсов, элементов и частей на странице персонажа (цены редактируются) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_res_value_gm.user.js) |
-| `hwm_sklad_rent_gm` | 0.1 | Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js) |
+| `hwm_sklad_rent_gm` | 0.2 | Клановый склад: одной кнопкой арендовать тот же набор артефактов (самые дешёвые без крафта) | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_sklad_rent_gm.user.js) |
 | `hwm_warlog_filter_gm` | 1.3 | Фильтр протокола боёв по типу боя (с добором строк со следующих страниц) и винрейт ГТ на странице. | [Установить](https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_warlog_filter_gm.user.js) |
 
 ## Лицензия
