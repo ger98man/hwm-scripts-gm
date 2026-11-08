@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_no_retaliation
 // @description    Во время боя помечает отряды, у которых снята отдача (ответ уже потрачен до их следующего хода)
-// @version        0.4
+// @version        0.5
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_no_retaliation_gm.user.js
@@ -42,10 +42,9 @@
 
   const style = document.createElement('style');
   style.textContent =
-    '.hwm-noret{position:fixed;z-index:50;pointer-events:none;transform:translateY(-50%);' +
-    'box-sizing:border-box;display:flex;align-items:center;justify-content:center;' +
-    'border-radius:3px;background:rgba(40,0,0,.75);border:1px solid #ff3b30;color:#ff3b30;' +
-    'font-family:Arial,sans-serif;font-weight:bold;line-height:1;text-shadow:0 0 2px #000;}';
+    '.hwm-noret{position:fixed;z-index:50;pointer-events:none;box-sizing:border-box;' +
+    'border-radius:3px;background:rgba(40,0,0,.75);border:1px solid #ff3b30;color:#ff3b30;}' +
+    '.hwm-noret svg{display:block;width:100%;height:100%;}';
   document.head.appendChild(style);
 
   const labels = {};
@@ -163,7 +162,9 @@
     if (!labels[key]) {
       const el = document.createElement('div');
       el.className = 'hwm-noret';
-      el.textContent = '✖';
+      // Рисуем линиями: положение символа ✖ в плашке зависит от шрифта
+      el.innerHTML = '<svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+        'stroke-linecap="round"><path d="M2.2 2.2 7.8 7.8M7.8 2.2 2.2 7.8"/></svg>';
       el.title = 'без отдачи';
       document.body.appendChild(el);
       labels[key] = el;
@@ -220,14 +221,11 @@
         const box = badgeBox(cre);
         const size = Math.round(box ? box.h * ky : 16);
         el.style.width = el.style.height = size + 'px';
-        el.style.fontSize = Math.round(size * 0.7) + 'px';
-        if (box) {
-          el.style.left = (rect.left + (box.x + box.w + GAP_X) * kx) + 'px';
-          el.style.top = (rect.top + (box.y + box.h / 2) * ky) + 'px';
-        } else {
-          el.style.left = (rect.left + cre.scr_x * kx - size / 2) + 'px';
-          el.style.top = (rect.top + cre.scr_y * ky + FALLBACK_Y) + 'px';
-        }
+        // Целые координаты: на дробных рамка плашки размывается по-разному у разных отрядов
+        const left = box ? box.x + box.w + GAP_X : cre.scr_x;
+        const centerY = (box ? box.y + box.h / 2 : cre.scr_y) * ky + (box ? 0 : FALLBACK_Y);
+        el.style.left = Math.round(rect.left + left * kx - (box ? 0 : size / 2)) + 'px';
+        el.style.top = Math.round(rect.top + centerY - size / 2) + 'px';
         el.style.display = rect.width > 0 ? 'block' : 'none';
       });
     }
