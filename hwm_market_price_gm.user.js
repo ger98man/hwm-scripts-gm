@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_market_price
 // @description    Рынок: за какую цену выставить арт с вашей прочностью, чтобы он был выгоднее лотов на странице, с учётом стоимости ремонта, падения максимальной прочности и комиссии 1%
-// @version        0.4
+// @version        0.5
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_market_price_gm.user.js
@@ -32,7 +32,11 @@
   if (!artType) return;
 
   const KEY = 'price_' + artType;
-  const SAVE_VERSION = 2; // старые настройки могли сохранить неверно разобранную стоимость ремонта
+  // Что в сохранённых настройках недостоверно и перезапрашивается:
+  // v2 - стоимость ремонта (её разбирали по тексту всей страницы арта и ловили хвост года);
+  // v3 - прочность (поле заполнялось максимумом первого лота, а у лота с несколькими
+  //      предметами максимум склеивался с количеством: «60/60» + «2 шт.» = 602).
+  const SAVE_VERSION = 3;
   const MAX_REPAIRS = 200;
   const FEE = 0.01; // комиссия рынка с продавца
 
@@ -57,8 +61,10 @@
   function loadSaved() {
     try {
       const data = JSON.parse(GM_getValue(KEY, '{}')) || {};
-      // стоимость ремонта из прошлых версий недостоверна: запросим её заново
-      if (data.v !== SAVE_VERSION) data.rep = null;
+      const version = data.v || 0;
+      // сбрасываем только то, что испортила именно та версия: верное значение не теряем
+      if (version < 2) data.rep = null;
+      if (version < 3) { data.cur = null; data.max = null; }
       return data;
     } catch (e) { return {}; }
   }
