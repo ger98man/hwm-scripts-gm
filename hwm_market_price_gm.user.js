@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_market_price
 // @description    Рынок: за какую цену выставить арт с вашей прочностью, чтобы он был выгоднее лотов на странице, с учётом стоимости ремонта, падения максимальной прочности и комиссии 1%
-// @version        0.3
+// @version        0.4
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_market_price_gm.user.js
@@ -77,8 +77,11 @@
   // ------------------ модель
 
   // Сколько раз чинить и какая выходит средняя цена боя. Бои после n-го ремонта: max - n.
+  // repair === null - режим «без ремонта»: арт отбивает свою прочность и всё.
   function bestPlan(price, cur, max, repair) {
-    let best = { perBattle: price / cur, repairs: 0, battles: cur };
+    const asIs = { perBattle: price / cur, repairs: 0, battles: cur };
+    if (repair == null) return asIs;
+    let best = asIs;
     let battles = cur;
     for (let n = 1; n <= MAX_REPAIRS && max - n > 0; n++) {
       battles += max - n;
@@ -91,6 +94,7 @@
   // Наибольшая цена, при которой средняя цена боя нашего арта не выше target.
   // Для каждого числа ремонтов n: price <= target * бои(n) - n * R; берём лучший вариант.
   function priceForTarget(target, cur, max, repair) {
+    if (repair == null) return Math.floor(target * cur);
     let best = target * cur;
     let battles = cur;
     for (let n = 1; n <= MAX_REPAIRS && max - n > 0; n++) {
@@ -102,12 +106,33 @@
 
   // ------------------ лоты на странице
 
+  // `textContent` склеивает соседние блоки ячейки: у лота с несколькими предметами
+  // «Прочность: 60/60» и «2 шт.» превращались в «60/602 шт.», и максимальная прочность
+  // читалась как 602 (у 70/70 - как 702). Проверено по лотам мифрилового кинжала:
+  // цена 9,487 при 60/602 и ремонте 8,626 даёт ровно показанные «бой: 15.2, ремонтов: 34»,
+  // а при 60/60 - «151.1, ремонтов: 2». Поэтому текст собираем по узлам, разделяя их.
+  function nodeText(root) {
+    const parts = [];
+    (function walk(node) {
+      Array.prototype.forEach.call(node.childNodes, function (child) {
+        if (child.nodeType === 3) { parts.push(child.nodeValue); return; }
+        if (child.nodeType !== 1) return;
+        parts.push('\n');
+        walk(child);
+        parts.push('\n');
+      });
+    })(root);
+    return parts.join('');
+  }
+
   function parseLots() {
     const lots = [];
     document.querySelectorAll('tr.wb').forEach(function (row) {
       const cells = row.children;
       if (cells.length < 4) return;
-      const dur = /Прочность:\s*(\d+)\s*\/\s*(\d+)/.exec(cells[0].textContent);
+      const text = nodeText(cells[0]);
+      const dur = /Прочность:\s*(\d+)\s*\/\s*(\d+)/.exec(text);
+      const count = /(\d+)\s*шт/.exec(text);
       const priceBox = cells[2].querySelector('div[id^="au"]');
       if (!dur || !priceBox) return;
       const price = num(priceBox.textContent);
@@ -119,6 +144,9 @@
         cur: parseInt(dur[1], 10),
         max: parseInt(dur[2], 10),
         price: price,
+        // Предметы в лоте одинаковые, а цена указана за штуку, поэтому на цену боя и на
+        // число ремонтов количество не влияет - показываем его только справочно.
+        count: count ? Math.max(1, parseInt(count[1], 10)) : 1,
         buyNow: cells[1].textContent.indexOf('Купить сразу') > -1,
       });
     });
@@ -156,7 +184,7 @@
   style.textContent =
     '.mp_panel{margin:6px 0;padding:8px 10px;border:1px solid #b9a77a;border-radius:4px;background:#f7f1df;font-size:12px;text-align:left}' +
     '.mp_title{font-weight:bold;margin-bottom:6px}' +
-    '.mp_inputs{display:flex;flex-wrap:nowrap;align-items:center;gap:14px;white-space:nowrap}' +
+    '.mp_inputs{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;white-space:nowrap}' +
     '.mp_inputs label{display:flex;align-items:center;gap:4px;color:#444}' +
     '.mp_inputs input{padding:1px 3px;font-size:12px}' +
     '.mp_note{color:#888;font-size:11px;margin-top:5px}' +
@@ -180,6 +208,8 @@
     '<label title="Текущая / максимальная прочность вашего арта">Прочность <input id="mp_cur" type="number" min="1" style="width:46px">' +
     ' / <input id="mp_max" type="number" min="1" style="width:46px"></label>' +
     '<label title="Стоимость одного ремонта">Ремонт <input id="mp_rep" type="number" min="0" style="width:66px"> зол.</label>' +
+    '<label title="Считать так, будто арт не чинят: цена боя = цена / текущая прочность">' +
+    '<input id="mp_norep" type="checkbox"> без ремонта</label>' +
     '<label title="На сколько золотых подрезать цену конкурента">Шаг <input id="mp_step" type="number" min="0" style="width:46px"> зол.</label>' +
     '<label title="Проверить свою цену: какое место займёт лот">Моя цена <input id="mp_my" type="number" min="1" style="width:76px"></label>' +
     '</div>' +
@@ -188,12 +218,13 @@
   table.parentNode.insertBefore(panel, table);
 
   const el = function (id) { return panel.querySelector('#' + id); };
-  const inputs = { cur: el('mp_cur'), max: el('mp_max'), rep: el('mp_rep'), step: el('mp_step'), my: el('mp_my') };
+  const inputs = { cur: el('mp_cur'), max: el('mp_max'), rep: el('mp_rep'), norep: el('mp_norep'), step: el('mp_step'), my: el('mp_my') };
 
   const sample = lots[0];
   inputs.cur.value = saved.cur || (sample ? sample.max : '');
   inputs.max.value = saved.max || (sample ? sample.max : '');
   inputs.rep.value = saved.rep != null ? saved.rep : '';
+  inputs.norep.checked = !!saved.norep;
   inputs.step.value = saved.step != null ? saved.step : 1;
 
   const notes = [];
@@ -202,10 +233,14 @@
   if (lots.some(function (lot) { return !lot.buyNow; })) notes.push('Лоты-торги показаны, но в расчёт цены не идут.');
 
   function readInputs() {
+    const norep = inputs.norep.checked;
+    const repField = inputs.rep.value === '' ? null : Math.max(0, parseInt(inputs.rep.value, 10) || 0);
     return {
       cur: parseInt(inputs.cur.value, 10),
       max: parseInt(inputs.max.value, 10),
-      rep: inputs.rep.value === '' ? null : Math.max(0, parseInt(inputs.rep.value, 10) || 0),
+      norep: norep,
+      repField: repField, // что набрано в поле: сохраняем, чтобы галочка не стирала цену ремонта
+      rep: norep ? null : repField, // null - считаем без ремонтов
       step: Math.max(0, parseInt(inputs.step.value, 10) || 0),
       my: parseInt(inputs.my.value, 10),
     };
@@ -219,7 +254,10 @@
       cell.style.cssText = 'font-size:11px;color:#555;margin-top:2px';
       lot.row.children[2].appendChild(cell);
     }
-    cell.textContent = 'бой: ' + fmtBattle(plan.perBattle) + (plan.repairs ? ' (ремонтов: ' + plan.repairs + ')' : '');
+    const extra = [];
+    if (plan.repairs) extra.push('ремонтов: ' + plan.repairs);
+    if (lot.count > 1) extra.push(lot.count + ' шт.');
+    cell.textContent = 'бой: ' + fmtBattle(plan.perBattle) + (extra.length ? ' (' + extra.join(', ') + ')' : '');
   }
 
   function place(market, perBattle) {
@@ -239,7 +277,8 @@
 
   function render() {
     const input = readInputs();
-    save({ v: SAVE_VERSION, cur: input.cur, max: input.max, rep: input.rep, step: input.step });
+    save({ v: SAVE_VERSION, cur: input.cur, max: input.max, rep: input.repField, norep: input.norep, step: input.step });
+    inputs.rep.disabled = input.norep;
     el('mp_note').textContent = notes.join(' ');
     const out = el('mp_out');
 
@@ -294,12 +333,12 @@
         ' (с учётом ремонта и комиссии).</div>';
     }
 
-    if (!input.rep) html += '<div class="mp_warn">Стоимость ремонта не задана: расчёт без ремонтов.</div>';
+    if (!input.norep && !input.rep) html += '<div class="mp_warn">Стоимость ремонта не задана: расчёт без ремонтов.</div>';
     out.innerHTML = html;
   }
 
   Object.keys(inputs).forEach(function (name) {
-    inputs[name].addEventListener('input', render);
+    inputs[name].addEventListener(inputs[name].type === 'checkbox' ? 'change' : 'input', render);
   });
   render();
 
