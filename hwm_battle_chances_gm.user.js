@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_chances
 // @description    В бою показывает вероятности: текущий шанс удачи и боевого духа с учётом счётчиков отряда, шанс вероятностного умения атакующего по наведённой цели с названием умения из базы игры (отбрасывающий удар, ослепление, оглушение и прочие) и шанс попадания по бестелесным (призраки, духи, привидения) с учётом двух предыдущих исходов
-// @version        0.9
+// @version        1.0
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_chances_gm.user.js
@@ -21,17 +21,32 @@
 // Удача и боевой дух: шанс не равен "10% за единицу", он плавает по ходу боя.
 // Справка игры (/ob-igre-udacha-i-boevoy-duh) даёт формулу со счётчиками у каждого отряда:
 //   P = p ^ (1 + [сработало раз] - [не сработало раз] * p/(1-p)),  p = удача/10 или мораль/10
+// Английская версия той же страницы (/about-game-luck-and-morale) даёт формулу дословно
+// так же, но с потолком, которого в русской нет: p = Min(0.5; удача/10) или Min(0.5;
+// мораль/10). Берём английскую: без потолка при параметре 10 формула даёт вечные 100%,
+// то есть гарантированное срабатывание каждый раз, чего в бою не бывает. На практике это
+// значит, что выше 5 параметр базовый шанс уже не поднимает.
 // Ни удача, ни мораль не действуют на самого героя: справка говорит это про удачу прямо,
 // а мораль везде описана как параметр отряда, и окно сведений самой игры для героя не
 // строится вовсе (prepare_info: "if (this.obj[i].hero){return 0;}"). Поэтому у героя обе
 // строки панели показывают "-", а его ход за испытание морали не считается.
 // Счётчики у удачи и морали отдельные. После срабатывания шанс падает, после серии
-// несрабатываний растёт; в среднем на бесконечности выходит 10% на единицу.
+// несрабатываний растёт; про бесконечное число испытаний справка говорит 10% на единицу,
+// но с потолком это верно только до пяти.
 // В клиенте этих счётчиков нет (проверено дампом объектов боя), поэтому считаем их сами:
-//   - испытание удачи = физическая атака отряда (учитываем и ответный удар);
-//   - испытание морали = ход отряда (голова шкалы АТБ);
-//   - срабатывание = строка лога ("посетила удача", "рвутся в бой" и т.п.),
-//     привязываем её к последнему испытанию, так как порядок лога и урона не гарантирован.
+//   - испытание удачи = физическая атака отряда (учитываем и ответный удар); срабатывание =
+//     строка лога ("посетила удача"), привязываем её к последней атаке по времени: удар и
+//     его строка приходят одним пакетом, порядок внутри не гарантирован;
+//   - испытание морали = ход отряда (голова шкалы АТБ). Испытание открывается, когда отряд
+//     встаёт в голову шкалы, и закрывается несрабатыванием, когда голова сменилась; строка
+//     лога ("рвутся в бой", "ожидают в страхе") закрывает его срабатыванием. По времени
+//     мораль привязывать нельзя: её строка приходит не в начале хода, а после действия
+//     отряда, и у своего отряда между одним и другим проходит сколько угодно времени.
+//     Отряд в строке ищем по имени: события приходят пачкой, и к моменту чтения лога
+//     голова шкалы может быть уже чужая.
+//     Сработавшая мораль хода подряд не даёт: справка говорит "высокая мораль позволяет
+//     отряду ждать своего следующего хода всего половину цикла", то есть одно испытание -
+//     это один ход отряда, и следующее откроется само, когда отряд снова получит ход.
 // Это модель, а не документированное поведение: счётчики видны в панели, чтобы расхождение
 // с сервером было заметно. Если скрипт открыт посреди боя, счётчики неполные - помечаем "~".
 //
@@ -76,7 +91,7 @@
   const REFRESH_MS = 300;
   // Удары одного отряда, пришедшие за это время, считаем одной атакой (сплеш, вихрь, боевое па)
   const ATTACK_WINDOW_MS = 500;
-  // На столько строка лога про удачу/мораль может разойтись по времени со своим испытанием
+  // На столько строка лога про удачу может разойтись по времени со своим ударом
   const LINE_WINDOW_MS = 2000;
   const PANEL_KEY = 'hwm_battle_chances_panel';
   // Запас от цифр урона до подписи и от курсора до подписи, когда цифр нет
@@ -179,11 +194,11 @@
 
   // --- формулы ---
 
-  // Текущий шанс удачи или морали по формуле из справки игры
+  // Текущий шанс удачи или морали по формуле из справки игры. Базовый шанс упирается
+  // в 0.5: выше пяти единиц параметр его не поднимает (английская версия справки)
   function adaptiveChance(value, hits, misses) {
-    const p = Math.min(Math.abs(value), 10) / 10;
+    const p = Math.min(0.5, Math.abs(value) / 10);
     if (!(p > 0)) return 0;
-    if (p >= 1) return 1;
     const exponent = 1 + hits - misses * p / (1 - p);
     const chance = Math.pow(p, exponent);
     return Math.min(1, Math.max(0, chance));
@@ -379,11 +394,15 @@
 
   const luckHits = {}, luckMisses = {};
   const moraleHits = {}, moraleMisses = {};
-  // Последнее испытание: к нему привязываем пришедшую строку лога
+  // Последняя атака: к ней привязываем пришедшую строку про удачу
   let lastAttacker = 0, lastAttackAt = 0;
-  let lastTurnUnit = 0, lastTurnAt = 0;
-  // Строка лога пришла раньше своего испытания - ждём его
-  let pendingLuck = 0, pendingUnluck = 0, pendingMorale = 0, pendingDismorale = 0;
+  // Строка про удачу пришла раньше своего удара - ждём его
+  let pendingLuck = 0, pendingUnluck = 0;
+  // Отряд, чьё испытание морали открыто: он стоит в голове шкалы, строка про мораль не пришла
+  let moraleTrial = 0;
+  // Отряд, чьё испытание морали закрыли последним: его строка могла прийти одним пакетом
+  // со сменой хода и опоздать к закрытию
+  let closedTrial = 0;
   // Когда отряд последний раз бил: для склейки одной атаки по нескольким целям
   const lastHitAt = {};
   // Чей ход сейчас. Ход, который шёл до загрузки скрипта, за испытание не считаем:
@@ -407,9 +426,9 @@
     for (const key in streakLost) delete streakLost[key];
     lastAttacker = 0;
     lastAttackAt = 0;
-    lastTurnUnit = 0;
-    lastTurnAt = 0;
-    pendingLuck = pendingUnluck = pendingMorale = pendingDismorale = 0;
+    pendingLuck = pendingUnluck = 0;
+    moraleTrial = 0;
+    closedTrial = 0;
     turnUnit = 0;
     turnSeeded = false;
   }
@@ -434,11 +453,21 @@
     count(luckMisses, attacker);
   }
 
+  // Испытание морали открыто, пока отряд стоит в голове шкалы. Если оно закрывается без
+  // строки лога, мораль не сработала
+  function closeMoraleTrial() {
+    if (!moraleTrial) return;
+    count(moraleMisses, moraleTrial);
+    closedTrial = moraleTrial;
+    moraleTrial = 0;
+  }
+
   // Испытание морали: ход отряда. Ход героя испытанием не считается - мораль у него
   // не своя, а армейская
   function noteTurn() {
     const front = (Array.isArray(w.atb) && parseInt(w.atb[0])) || 0;
     if (!(front > 0) || front === turnUnit) return;
+    closeMoraleTrial();
     turnUnit = front;
     if (!turnSeeded) {
       turnSeeded = true;
@@ -446,20 +475,7 @@
     }
     const unit = getUnit(front);
     if (unit && unit.hero) return;
-    const now = Date.now();
-    lastTurnUnit = front;
-    lastTurnAt = now;
-    if (pendingMorale && now - pendingMorale < LINE_WINDOW_MS) {
-      pendingMorale = 0;
-      count(moraleHits, front);
-      return;
-    }
-    if (pendingDismorale && now - pendingDismorale < LINE_WINDOW_MS) {
-      pendingDismorale = 0;
-      count(moraleHits, front);
-      return;
-    }
-    count(moraleMisses, front);
+    moraleTrial = front;
   }
 
   // Срабатывание удачи: переводим последнее испытание из несработавших в сработавшие
@@ -473,14 +489,39 @@
     pendingLuck = now;
   }
 
-  function noteMoraleLine() {
-    const now = Date.now();
-    if (lastTurnUnit > 0 && now - lastTurnAt < LINE_WINDOW_MS && (moraleMisses[lastTurnUnit] || 0) > 0) {
-      moraleMisses[lastTurnUnit]--;
-      count(moraleHits, lastTurnUnit);
-      return;
+  // Отряд, названный в строке лога. Имя одного отряда бывает частью имени другого,
+  // поэтому из совпавших берём самое длинное; одноимённых отличить нельзя - тогда отряда нет
+  function lineUnit(line) {
+    const all = scene && scene.obj ? scene.obj : {};
+    const found = [];
+    for (const key in all) {
+      const unit = all[key];
+      if (!unit || unit.rock || !(unit.nownumber > 0) || !unit.nametxt) continue;
+      if (line.indexOf(unit.nametxt) > -1) found.push(unit);
     }
-    pendingMorale = now;
+    const longest = found.reduce(function (max, unit) {
+      return Math.max(max, unit.nametxt.length);
+    }, 0);
+    const best = found.filter(function (unit) { return unit.nametxt.length === longest; });
+    return best.length === 1 ? best[0].obj_index : 0;
+  }
+
+  // Срабатывание морали или её просадка: закрываем испытание отряда успехом. Отряд берём
+  // из самой строки, потому что голова шкалы может быть уже чужая; если по имени не
+  // разобрать, остаётся отряд с открытым испытанием
+  function noteMoraleLine(line) {
+    const index = lineUnit(line) || moraleTrial;
+    if (!(index > 0)) return;
+    const isOpen = index === moraleTrial;
+    if (isOpen) moraleTrial = 0;
+    // Испытание этого отряда только что закрыли несрабатыванием - переписываем его исход.
+    // Отряд, которого в голове шкалы мы не видели (пропущенный из-за просадки ход),
+    // несрабатывания не получал, и переписывать у него нечего
+    if (!isOpen && index === closedTrial && (moraleMisses[index] || 0) > 0) {
+      moraleMisses[index]--;
+      closedTrial = 0;
+    }
+    count(moraleHits, index);
   }
 
   // Промах. Строка лога называет отряд, но одноимённых различить нельзя, поэтому ищем
@@ -527,7 +568,7 @@
     while (logRead < lines.length) {
       const line = String(lines[logRead++] || '');
       if (hasPhrase(line, PHRASES.luck) || hasPhrase(line, PHRASES.unluck)) noteLuckLine();
-      if (hasPhrase(line, PHRASES.morale) || hasPhrase(line, PHRASES.dismorale)) noteMoraleLine();
+      if (hasPhrase(line, PHRASES.morale) || hasPhrase(line, PHRASES.dismorale)) noteMoraleLine(line);
       if (hasPhrase(line, PHRASES.miss)) noteMissLine(line);
     }
   }
@@ -586,6 +627,7 @@
       installed: hooked, onTop: !!(scene && scene.procceddamage === hookFn),
       abilityBase: w.abil_names ? Object.keys(w.abil_names).length : 0,
       partial: partial, logRead: logRead, turnUnit: turnUnit,
+      moraleTrial: moraleTrial, closedTrial: closedTrial,
       luckHits: luckHits, luckMisses: luckMisses,
       moraleHits: moraleHits, moraleMisses: moraleMisses,
       streak: streak, streakLost: streakLost,
