@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_battle_stats
 // @description    В бою показывает суммарное здоровье обеих команд и рейтинг отрядов и героев по нанесённому урону
-// @version        0.1
+// @version        0.2
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_battle_stats_gm.user.js
@@ -49,13 +49,23 @@
     title: 'Статистика боя', health: 'Здоровье команд', damage: 'Нанесённый урон',
     empty: 'Урона ещё не было', unavailable: 'Урон не считается: игра не отдала обработчик',
     hint: 'Потяните за заголовок, щёлкните чтобы свернуть',
+    blue: 'Синяя команда', red: 'Красная команда', neutral: 'Нейтралы',
+    shifted: 'Максимум сдвинут эффектами: у части отрядов изменено здоровье существа, ' +
+      'поэтому процент нельзя сравнивать с началом боя',
   } : {
     title: 'Battle stats', health: 'Team health', damage: 'Damage dealt',
     empty: 'No damage yet', unavailable: 'Damage is not counted: no game handler',
     hint: 'Drag the header, click to collapse',
+    blue: 'Blue team', red: 'Red team', neutral: 'Neutrals',
+    shifted: 'Max is shifted by effects: some stacks have modified creature health, ' +
+      'so the percentage is not comparable with the start of the battle',
   };
 
+  // Сторону клиент ставит по чётности владельца (show_polep.js: owner%2==1 -> side 1,
+  // иначе -1, owner 20 -> side 20), а эти цвета панель показывает с первой версии:
+  // по ним команды и подписаны
   const SIDE_COLORS = { '1': '#8ab4f8', '-1': '#ff8a7a' };
+  const SIDE_NAMES = { '1': TEXT.blue, '-1': TEXT.red };
   const NEUTRAL_COLOR = '#d8c89a';
 
   /* ---------- данные боя ---------- */
@@ -80,13 +90,19 @@
     return !!unit && !unit.hero && !unit.rock;
   }
 
-  // Текущее здоровье считаем по верхнему существу отряда. Если игра урезала здоровье существ
-  // (maxhealth меньше realhealth), исходный максимум неизвестен: max равен null
+  // Текущее здоровье считаем по верхнему существу отряда: оно недобито, остальные целы.
+  // Максимум - полное здоровье отряда при текущем максимуме существа (maxhealth), как в
+  // нативном окне отряда (show_polep.js, cre_info_health: nowhealth/maxhealth). Базовое
+  // здоровье существа лежит отдельно, в realhealth, и эффекты его не трогают: действующий
+  // brf даёт +10% к maxhealth, ярость крови - ragehp. Поэтому maxhealth !== realhealth
+  // означает только одно: знаменатель сдвинут эффектами относительно начала боя (baseline)
   function stackHealth(unit) {
     const count = unit.nownumber || 0;
     return {
       now: count > 0 ? (count - 1) * unit.maxhealth + unit.nowhealth : 0,
-      max: unit.maxhealth === unit.realhealth ? unit.maxnumber * unit.realhealth : null,
+      // Декоративные объекты поля приходят без численности и здоровья: || 0 держит NaN вне панели
+      max: (unit.maxnumber || 0) * (unit.maxhealth || 0),
+      baseline: unit.maxhealth === unit.realhealth,
     };
   }
 
@@ -207,7 +223,7 @@
     const bySide = {};
 
     Object.keys(names).forEach(function (side) {
-      bySide[side] = { side: Number(side), names: names[side], now: 0, max: 0, unknown: false };
+      bySide[side] = { side: Number(side), names: names[side], now: 0, max: 0, baseline: true };
     });
     Object.keys(list).forEach(function (key) {
       const unit = list[key];
@@ -218,11 +234,8 @@
       // больше её максимума и процент получается больше ста
       const health = stackHealth(unit);
       team.now += health.now;
-      if (health.max === null) {
-        team.unknown = true;
-        return;
-      }
       team.max += health.max;
+      team.baseline = team.baseline && health.baseline;
     });
 
     return Object.keys(bySide).map(function (side) { return bySide[side]; }).sort(function (a, b) {
@@ -398,6 +411,10 @@
     return SIDE_COLORS[String(side)] || NEUTRAL_COLOR;
   }
 
+  function sideName(side) {
+    return SIDE_NAMES[String(side)] || TEXT.neutral;
+  }
+
   function num(value) {
     return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
@@ -416,21 +433,24 @@
     return el;
   }
 
+  // Команду подписываем цветом её стороны, а ники её героев уходят в подсказку:
+  // в бою несколько владельцев на сторону, и ники говорят про сторону меньше, чем цвет
   function teamBlock(team) {
     const color = sideColor(team.side);
     const percent = team.max > 0 ? team.now / team.max * 100 : 0;
+    const mark = team.baseline ? '' : '~';
 
     const names = document.createElement('div');
     names.className = 'hwm_bs_names';
     names.style.color = color;
-    names.textContent = team.names.join(', ');
-    names.title = names.textContent;
+    names.textContent = sideName(team.side);
+    names.title = team.names.join(', ');
 
     const hp = document.createElement('div');
     hp.className = 'hwm_bs_hp';
-    hp.textContent = team.unknown || !team.max
-      ? num(team.now) + '/?'
-      : num(team.now) + '/' + num(team.max) + ' (' + Math.round(percent) + '%)';
+    hp.textContent = num(team.now) + '/' + num(team.max) +
+      ' (' + mark + Math.round(percent) + '%)';
+    if (mark) hp.title = TEXT.shifted;
 
     const top = document.createElement('div');
     top.className = 'hwm_bs_team_top';

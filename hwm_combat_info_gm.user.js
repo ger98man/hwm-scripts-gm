@@ -4,7 +4,7 @@
 // @license        MIT
 // @namespace      hwm_combat_info
 // @description    В бою под окном информации об отряде показывает здоровье и численность, а под окном героя — здоровье его армии
-// @version        1.2
+// @version        1.3
 // @tag            hwm-gm
 // @homepageURL    https://github.com/ger98man/hwm-scripts-gm
 // @updateURL      https://raw.githubusercontent.com/ger98man/hwm-scripts-gm/main/hwm_combat_info_gm.user.js
@@ -63,13 +63,20 @@
     return null;
   }
 
-  // Текущее здоровье считаем по верхнему существу отряда. Если игра урезала здоровье существ
-  // (maxhealth меньше realhealth), исходный максимум неизвестен: max равен null
+  // Текущее здоровье считаем по верхнему существу отряда: оно недобито, остальные целы.
+  // Максимум - полное здоровье отряда при текущем максимуме существа (maxhealth), как в
+  // нативном окне отряда (show_polep.js, cre_info_health: nowhealth/maxhealth). Базовое
+  // здоровье существа лежит отдельно, в realhealth, и эффекты его не трогают: действующий
+  // brf даёт +10% к maxhealth, ярость крови - ragehp. Поэтому maxhealth !== realhealth
+  // означает только одно: знаменатель сдвинут эффектами относительно начала боя (baseline),
+  // и процент такого отряда помечается в выводе
   function stackHealth(unit) {
     const count = unit.nownumber || 0;
     return {
       now: count > 0 ? (count - 1) * unit.maxhealth + unit.nowhealth : 0,
-      max: unit.maxhealth === unit.realhealth ? unit.maxnumber * unit.realhealth : null,
+      // Декоративные объекты поля приходят без численности и здоровья: || 0 держит NaN вне панели
+      max: (unit.maxnumber || 0) * (unit.maxhealth || 0),
+      baseline: unit.maxhealth === unit.realhealth,
     };
   }
 
@@ -77,17 +84,19 @@
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '\u2009');
   }
 
+  // Пометка ~ у процента: максимум сдвинут эффектами, сравнивать его с началом боя нельзя
   function formatHealth(health) {
-    if (health.max === null) return formatNumber(health.now) + '/?';
     const percent = health.max > 0 ? Math.round(health.now / health.max * 100) : 0;
-    return formatNumber(health.now) + '/' + formatNumber(health.max) + ' (' + percent + '%)';
+    const mark = health.baseline ? '' : '~';
+    return formatNumber(health.now) + '/' + formatNumber(health.max) +
+      ' (' + mark + percent + '%)';
   }
 
   // Армия героя - отряды того же владельца. owner сервер шлёт на каждый объект боя
   // (show_polep.js: this.obj[i]['owner']=data.substr(4,6)-0), герой владельца лежит
   // в heroes[owner]. Призванных прямо в бою считаем наравне с остальными и в текущем
   // здоровье, и в максимуме: на поле это такое же здоровье, которое придётся пробивать.
-  // Максимум всей армии неизвестен, если он неизвестен хоть у одного отряда
+  // Максимум армии сдвинут эффектами, если он сдвинут хоть у одного отряда
   function armyHealth(hero) {
     const units = allUnits();
     return Object.keys(units).reduce(function (total, key) {
@@ -97,12 +106,13 @@
       return {
         stacks: total.stacks + 1,
         now: total.now + health.now,
-        max: total.max === null || health.max === null ? null : total.max + health.max,
+        max: total.max + health.max,
+        baseline: total.baseline && health.baseline,
       };
-    }, { stacks: 0, now: 0, max: 0 });
+    }, { stacks: 0, now: 0, max: 0, baseline: true });
   }
 
-  // Погибшую армию показываем как 0 от начального здоровья. Если отрядов нет совсем
+  // Погибшую армию показываем как 0 от полного здоровья армии. Если отрядов нет совсем
   // (декоративные объекты поля), то и показывать нечего: null
   function armyLine(hero) {
     const health = armyHealth(hero);
